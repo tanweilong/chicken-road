@@ -323,13 +323,14 @@ Output-token consumption per task across the delivery pipeline.
 | QA test pass — Stage 4 Cycle 1 (55 cases, 5 defects) | tester | Sonnet 5 | 154,540 |
 | Fix cycle — BUG-1..5 (Stage 4 Cycle 2) | frontend | Sonnet 5 | 99,303 |
 | QA re-verify — Stage 4 Cycle 2 (47 cases) | tester | Sonnet 5 | 94,544 |
+| Delivery report (Stage 5) | pm | Opus 4.8 | 76,103 |
 
 **Per-model subtotals**
 | Model | Tokens |
 |-------|--------|
-| Opus 4.8 | 192,730 |
+| Opus 4.8 | 268,833 |
 | Sonnet 5 | 498,495 |
-| **Grand total** | **691,225** |
+| **Grand total** | **767,328** |
 
 *Note: these are output-token counts — a relative picture of effort per task, not a
 billing-exact figure.*

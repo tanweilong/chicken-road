@@ -10,5 +10,8 @@ Per-task model + token consumption (output tokens from each task's completion da
 | QA test pass — Stage 4 Cycle 1 (55 cases, 5 defects) | tester | Sonnet 5 | 154,540 | 2026-07-23 |
 | Fix cycle — BUG-1..5 (Stage 4 Cycle 2) | frontend | Sonnet 5 | 99,303 | 2026-07-23 |
 | QA re-verify — Stage 4 Cycle 2 (47 cases, all fixes confirmed) | tester | Sonnet 5 | 94,544 | 2026-07-23 |
+| Delivery report (Stage 5) | pm | Opus 4.8 | 76,103 | 2026-07-23 |
+
+**Per-model subtotals:** Opus 4.8 = 268,833 · Sonnet 5 = 498,495 · **Grand total ≈ 767,328** (output-token counts; relative effort, not billing-exact).
 
 <!-- Running tally; totals + per-model subtotals compiled into the Delivery Report at ship. -->
