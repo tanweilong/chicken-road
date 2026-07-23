@@ -1,0 +1,780 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chicken Road — Art Direction Style Guide</title>
+<style>
+  :root{
+    /* ===== Chrome / meta palette (title, HUD, overlay screens) ===== */
+    --chrome-bg:        #0F172A;
+    --chrome-panel:      #192134;
+    --chrome-panel-a:    rgba(15, 23, 42, 0.82);
+    --chrome-border:     rgba(255, 255, 255, 0.10);
+    --chrome-fg:          #FFFFFF;
+    --chrome-fg-muted:   #94A3B8;
+    --chrome-primary:    #DC2626;
+    --chrome-secondary:  #2563EB;
+    --chrome-accent:     #22C55E;
+    --chrome-gold:        #FFD23F;
+    --chrome-warning:    #FFB100;
+
+    /* ===== Stage 1 — Countryside (day) ===== */
+    --s1-sky-top:#8FD3F4; --s1-sky-bottom:#C9F2C0; --s1-sun:#FFE066;
+    --s1-hill-far:#A6DE7A; --s1-hill-near:#7FC24C;
+    --s1-grass:#6ABE30; --s1-grass-alt:#4F9A28; --s1-grass-edge:#3E7A1F;
+    --s1-road:#4A4A55; --s1-road-alt:#43434C; --s1-lane-marking:#F4E285;
+    --s1-river:#3AA6D9; --s1-river-dark:#2C86B0; --s1-river-foam:#BEEFFF;
+    --s1-tree-canopy:#2E7D32; --s1-tree-trunk:#6B4226;
+    --s1-rock:#9C9C9C; --s1-rock-shadow:#6E6E6E;
+    --s1-car-red:#E4572E; --s1-car-blue:#3C91E6; --s1-car-yellow:#FFC93C; --s1-headlight-glow:#FFF4B8;
+
+    /* ===== Stage 2 — City (night, streetlights) ===== */
+    --s2-sky-top:#1A1A2E; --s2-sky-bottom:#16213E; --s2-skyline:#0F1024; --s2-star:#E8E8F0;
+    --s2-building:#23233A; --s2-window-lit:#FFCB57; --s2-window-dark:#14141F;
+    --s2-grass:#2F6B3D; --s2-grass-alt:#24532F;
+    --s2-road:#2B2B36; --s2-road-alt:#26262F; --s2-lane-marking:#FFD866;
+    --s2-river:#1D4E63; --s2-river-dark:#17394A; --s2-river-foam:#7FD8E8;
+    --s2-streetlight-glow:#FFD866; --s2-streetlight-pole:#3A3A44;
+    --s2-obstacle-barrel:#545461; --s2-car-body:#464655; --s2-car-taxi:#F4C430;
+    --s2-headlight-glow:#FFF6D0; --s2-taillight:#FF3B3B; --s2-neon-accent:#17E9E0;
+
+    /* ===== Stage 3 — Industrial Zone (hazard-lit) ===== */
+    --s3-sky-top:#2A211C; --s3-sky-bottom:#1B1613; --s3-smokestack:#171310; --s3-ember:#FF7A29;
+    --s3-ground:#6B6153; --s3-ground-alt:#5A5245;
+    --s3-road:#3A342E; --s3-road-alt:#332E29;
+    --s3-hazard-a:#FFB100; --s3-hazard-b:#1A1A1A;
+    --s3-rail-bed:#4A423A; --s3-rail-metal:#C7C2B8; --s3-rail-rust:#8B5E3C;
+    --s3-signal-red:#FF2E2E; --s3-signal-amber:#FFB100;
+    --s3-obstacle-barrel:#C0392B; --s3-obstacle-rust:#7A2418; --s3-crate:#8A6D3B;
+    --s3-truck-body:#55524D; --s3-truck-cab:#3A3733; --s3-headlight-glow:#FFD24D;
+
+    --corn-kernel:#FFD23F; --corn-husk:#7ABF4C;
+
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px; --space-6:32px;
+    --shadow-pixel: 4px 4px 0 rgba(0,0,0,0.6);
+    --shadow-pixel-sm: 2px 2px 0 rgba(0,0,0,0.6);
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:#0B0E1A; color:#E7E9F0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height:1.55;
+  }
+  header.doc-header{
+    padding: 40px 24px 24px; max-width:1100px; margin:0 auto;
+  }
+  header.doc-header h1{ font-size:28px; margin:0 0 8px; }
+  header.doc-header p{ color:#9AA3B8; max-width:70ch; margin:6px 0; }
+  section.doc-section{ max-width:1100px; margin: 0 auto 56px; padding: 0 24px; }
+  section.doc-section h2{
+    font-size:13px; text-transform:uppercase; letter-spacing:2px; color:#7DD3FC;
+    border-bottom:1px solid rgba(255,255,255,0.12); padding-bottom:10px; margin-bottom:20px;
+  }
+  section.doc-section h3{ font-size:15px; color:#E7E9F0; margin: 28px 0 12px; }
+  .note{ font-size:13px; color:#8B93A8; margin-top:6px; }
+
+  /* ---- palette swatches ---- */
+  .palette-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:24px; }
+  .palette-card{
+    background:#12162A; border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:16px;
+  }
+  .palette-card h4{ margin:0 0 4px; font-size:15px; }
+  .palette-card .mood{ font-size:12px; color:#8B93A8; margin-bottom:12px; }
+  .chip-row{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+  .chip{ width:22px; height:22px; border-radius:3px; border:1px solid rgba(255,255,255,0.15); flex:none; }
+  .chip-label{ font-size:12px; color:#C6CCDC; }
+  .chip-hex{ font-size:11px; color:#7B8299; margin-left:auto; font-family:ui-monospace, monospace; }
+
+  /* ---- sprite showcase ---- */
+  .sprite-grid{ display:flex; flex-wrap:wrap; gap:32px; align-items:flex-start; }
+  .sprite-card{ background:var(--chrome-panel); border:2px solid var(--chrome-border); padding:16px; text-align:center; width:200px; }
+  .sprite-card canvas{ image-rendering: pixelated; background:#0B0E1A; display:block; margin:0 auto 10px; }
+  .sprite-card .label{ font-size:13px; color:var(--chrome-fg); font-weight:600; }
+  .sprite-card .desc{ font-size:11px; color:var(--chrome-fg-muted); margin-top:4px; }
+
+  /* ---- pixel-art game type system ---- */
+  .px{ font-family: "Courier New", ui-monospace, monospace; text-transform:uppercase; letter-spacing:1px; }
+  .px-title{ font-size:26px; font-weight:700; color:var(--chrome-fg);
+    text-shadow: 2px 2px 0 #000, -2px 2px 0 #000, 2px -2px 0 #000, -2px -2px 0 #000, 0 3px 0 #000; }
+  .px-label{ font-size:9px; color:var(--chrome-fg-muted); }
+  .px-value{ font-size:15px; color:var(--chrome-fg); font-variant-numeric: tabular-nums; }
+  .px-prompt{ font-size:11px; color:var(--chrome-fg); animation: blink 1s steps(1) infinite; }
+  .px-body{ font-size:12px; color:var(--chrome-fg); }
+  .px-gold{ color:var(--chrome-gold); }
+  .px-accent{ color:var(--chrome-accent); }
+  .px-danger{ color:var(--chrome-primary); }
+  @keyframes blink{ 50%{ opacity:0; } }
+
+  .notch-panel{
+    background:var(--chrome-panel);
+    border:2px solid var(--chrome-border);
+    box-shadow: var(--shadow-pixel);
+    clip-path: polygon(8px 0,calc(100% - 8px) 0,100% 8px,100% calc(100% - 8px),calc(100% - 8px) 100%,8px 100%,0 calc(100% - 8px),0 8px);
+    padding:16px;
+  }
+
+  /* ---- screen mockups ---- */
+  .screens{ display:flex; flex-wrap:wrap; gap:32px; }
+  .screen-block{ width:336px; }
+  .screen-caption{ font-size:12px; color:#8B93A8; margin-top:8px; }
+  .frame{
+    position:relative; width:336px; height:576px; overflow:hidden;
+    border:2px solid rgba(255,255,255,0.15); image-rendering: pixelated;
+  }
+  .frame > canvas{ position:absolute; inset:0; display:block; image-rendering:pixelated; }
+
+  .hud-bar{
+    position:absolute; top:0; left:0; right:0; height:48px;
+    background:var(--chrome-panel-a);
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 12px; border-bottom:1px solid var(--chrome-border);
+  }
+  .hud-zone{ display:flex; flex-direction:column; }
+  .hud-center{ display:flex; align-items:center; }
+  .stage-badge{
+    background:var(--chrome-secondary); color:#fff; padding:4px 10px;
+    clip-path: polygon(4px 0,calc(100% - 4px) 0,100% 4px,100% calc(100% - 4px),calc(100% - 4px) 100%,4px 100%,0 calc(100% - 4px),0 4px);
+  }
+  .mute-btn{
+    width:44px; height:44px; display:flex; align-items:center; justify-content:center;
+    background:rgba(255,255,255,0.06); border:1px solid var(--chrome-border); color:#fff; font-size:16px;
+    clip-path: polygon(4px 0,calc(100% - 4px) 0,100% 4px,100% calc(100% - 4px),calc(100% - 4px) 100%,4px 100%,0 calc(100% - 4px),0 4px);
+  }
+  .corn-count{ display:flex; align-items:center; gap:6px; }
+
+  .center-panel{
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:270px; text-align:center;
+  }
+  .scrim{ position:absolute; inset:0; }
+  .scrim.dim{ background:rgba(0,0,0,0.55); }
+  .scrim.danger{ background:linear-gradient(rgba(220,38,38,0.35), rgba(0,0,0,0.65)); }
+  .scrim.gold{ background:linear-gradient(rgba(255,210,63,0.20), rgba(0,0,0,0.55)); }
+
+  .stat-row{ display:flex; justify-content:space-between; margin:6px 0; }
+  .new-best{
+    display:inline-block; background:var(--chrome-gold); color:#1B1611; font-size:9px;
+    padding:2px 6px; margin-left:6px; animation: pulse 1s ease-in-out infinite;
+  }
+  @keyframes pulse{ 50%{ transform:scale(1.08); } }
+  .progress-track{ height:6px; background:rgba(255,255,255,0.12); margin-top:14px; }
+  .progress-fill{ height:100%; background:var(--chrome-accent); width:0%; animation: fillbar 1.8s linear forwards; }
+  @keyframes fillbar{ to{ width:100%; } }
+
+  .title-stack{ position:absolute; top:0; left:0; right:0; bottom:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding-top:56px; gap:18px; }
+  .title-chicken{ margin-top:10px; }
+
+  .confetti{ position:absolute; width:6px; height:6px; top:-10px; animation: fall linear infinite; }
+  @keyframes fall{ to{ transform: translateY(620px) rotate(180deg); } }
+</style>
+</head>
+<body>
+
+<header class="doc-header">
+  <h1>Chicken Road — Art Direction Style Guide</h1>
+  <p><strong>Direction: "Arcade Pixel."</strong> Chunky, high-saturation 16×16-grid pixel art with hard offset
+  shadows, notched panel corners and zero anti-aliasing, wrapped in a constant dark arcade-cabinet UI chrome so the
+  product identity holds steady while the world transforms across 3 stages. Grounded via the <code>ui-ux-pro-max</code>
+  design-system lookup (Pixel Art style, Press Start 2P/VT323 mood reference, Arcade &amp; Retro Game color system).</p>
+  <p class="note">This file is fully self-contained (no external network requests, no image files, no CDN fonts) —
+  every sprite and screen below is drawn with inline &lt;canvas&gt; pixel-fills and CSS, exactly matching the
+  constraint the shipped single-file game must also honor. Open directly in a browser.</p>
+  <p class="note">Full spec, rationale, animation timings and accessibility notes: see <code>docs/DESIGN.md</code>.</p>
+</header>
+
+<!-- ============================== STAGE PALETTES ============================== -->
+<section class="doc-section" id="palettes">
+  <h2>1 — Stage Palettes</h2>
+  <div class="palette-grid" id="palette-grid"></div>
+  <h3>Chrome / Meta Palette (title, HUD, overlay screens — constant across all stages)</h3>
+  <div class="palette-grid" id="chrome-grid"></div>
+</section>
+
+<!-- ============================== SPRITES ============================== -->
+<section class="doc-section" id="sprites">
+  <h2>2 — Sprite Showcase</h2>
+  <p class="note">All sprites are drawn on a native pixel grid with <code>imageSmoothingEnabled = false</code>, then
+  scaled up crisply. Animation demo speeds below are intentionally slowed for reviewability — real in-game timings
+  are noted per card (see also DESIGN.md §1.7 / §4).</p>
+  <div class="sprite-grid">
+    <div class="sprite-card">
+      <canvas id="c-chicken-idle" width="16" height="16" style="width:128px;height:128px;"></canvas>
+      <div class="label">Chicken — Idle (head-bob)</div>
+      <div class="desc">4-frame bob loop, 180ms/frame (720ms cycle) in-game. Demo slowed slightly for visibility.</div>
+    </div>
+    <div class="sprite-card">
+      <canvas id="c-chicken-hop" width="16" height="16" style="width:128px;height:128px;"></canvas>
+      <div class="label">Chicken — Hop (squash &amp; stretch)</div>
+      <div class="desc">Real hop = 140–160ms total. Demo cycle slowed to ~900ms for readability.</div>
+    </div>
+    <div class="sprite-card">
+      <canvas id="c-car" width="32" height="16" style="width:192px;height:96px;"></canvas>
+      <div class="label">Vehicle — Car (Stage 1)</div>
+      <div class="desc">Headlight glow is the one deliberate soft-edge exception in the art system.</div>
+    </div>
+    <div class="sprite-card">
+      <canvas id="c-truck" width="40" height="18" style="width:200px;height:90px;"></canvas>
+      <div class="label">Vehicle — Truck (Stage 3)</div>
+      <div class="desc">Darker cab block + longer cargo body; harsher industrial headlight glow.</div>
+    </div>
+    <div class="sprite-card">
+      <canvas id="c-log" width="32" height="14" style="width:192px;height:84px;"></canvas>
+      <div class="label">River — Log &amp; Lily Pad</div>
+      <div class="desc">Both bob ±1px on a slow 1.2s float cycle.</div>
+    </div>
+    <div class="sprite-card">
+      <canvas id="c-corn" width="12" height="12" style="width:120px;height:120px;"></canvas>
+      <div class="label">Corn Pickup — Spin</div>
+      <div class="desc">4-frame horizontal squash fakes a Y-axis spin, 480ms/loop in-game.</div>
+    </div>
+    <div class="sprite-card">
+      <canvas id="c-train" width="72" height="20" style="width:288px;height:80px;"></canvas>
+      <div class="label">Train + Warning Signal</div>
+      <div class="desc">Trailing ghost copies sell speed; signal blinks red every 200ms during telegraph.</div>
+    </div>
+    <div class="sprite-card">
+      <canvas id="c-eagle" width="24" height="24" style="width:144px;height:144px;"></canvas>
+      <div class="label">Eagle (fall-behind)</div>
+      <div class="desc">Spread-wing silhouette, scales 40%→100% on approach during swoop-grab.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== JUICE ============================== -->
+<section class="doc-section" id="juice">
+  <h2>3 — Particle / Juice Reference</h2>
+  <div class="sprite-grid">
+    <div class="sprite-card">
+      <canvas id="c-dust" width="32" height="32" style="width:128px;height:128px;"></canvas>
+      <div class="label">Dust Puff (hop)</div>
+      <div class="desc">3–5 particles, 200–300ms fade.</div>
+    </div>
+    <div class="sprite-card">
+      <canvas id="c-feather" width="32" height="32" style="width:128px;height:128px;"></canvas>
+      <div class="label">Feather Burst (impact death)</div>
+      <div class="desc">6–10 particles, gravity arc, 500–700ms.</div>
+    </div>
+    <div class="sprite-card">
+      <canvas id="c-splash" width="32" height="32" style="width:128px;height:128px;"></canvas>
+      <div class="label">Water Splash</div>
+      <div class="desc">Droplets + expanding ring, 400–600ms.</div>
+    </div>
+    <div class="sprite-card">
+      <canvas id="c-sparkle" width="32" height="32" style="width:128px;height:128px;"></canvas>
+      <div class="label">Corn Sparkle</div>
+      <div class="desc">4–6 particles, 250–350ms.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== SCREENS ============================== -->
+<section class="doc-section" id="screens">
+  <h2>4 — Screen Mockups</h2>
+  <p class="note">Each frame below is rendered at <strong>336×576</strong> — the game's actual internal virtual
+  resolution — so this <em>is</em> the mobile-width preview (a 360–414px phone viewport shows this at ~1:1 to
+  1.2× scale, letterboxed top/bottom on very tall or short screens; desktops center this same column with
+  letterbox sides). No layout reflow occurs at any breakpoint per PRD §4.</p>
+
+  <div class="screens">
+    <div class="screen-block">
+      <div class="frame" id="frame-title">
+        <canvas width="336" height="576"></canvas>
+        <div class="title-stack">
+          <div class="px px-title">CHICKEN ROAD</div>
+          <div class="title-chicken"><canvas id="c-title-chicken" width="16" height="16" style="width:96px;height:96px;image-rendering:pixelated;"></canvas></div>
+          <div class="px px-prompt">PRESS SPACE TO START</div>
+          <div class="px px-prompt" style="animation-delay:.5s;">TAP TO START</div>
+          <div class="px px-body px-gold" style="margin-top:6px;">BEST: 142</div>
+        </div>
+      </div>
+      <div class="screen-caption">Title — Stage 1 backdrop visible immediately; idle-bob chicken hero; adaptive
+      keyboard/touch prompt; session best shown if &gt;0. Mobile-width preview: 336px (native).</div>
+    </div>
+
+    <div class="screen-block">
+      <div class="frame" id="frame-hud">
+        <canvas width="336" height="576"></canvas>
+        <div class="hud-bar">
+          <div class="hud-zone">
+            <span class="px px-label">SCORE</span>
+            <span class="px px-value">238</span>
+          </div>
+          <div class="hud-center"><span class="px px-value stage-badge" style="font-size:11px;">STAGE 2/3</span></div>
+          <div class="hud-zone" style="align-items:flex-end;">
+            <div class="corn-count">
+              <span class="px px-value px-gold">🌽 14</span>
+              <span class="mute-btn">🔊</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="screen-caption">In-game HUD — Stage 2 (City, night). 48px chrome bar, tabular score, stage
+      badge, corn counter, 44×44px mute target. Mobile-width preview: 336px (native).</div>
+    </div>
+
+    <div class="screen-block">
+      <div class="frame" id="frame-clear">
+        <canvas width="336" height="576"></canvas>
+        <div class="scrim dim"></div>
+        <div class="center-panel notch-panel">
+          <div class="px px-title px-accent" style="font-size:20px;">STAGE 1 CLEAR!</div>
+          <div class="stat-row px px-body"><span>SCORE</span><span>30</span></div>
+          <div class="stat-row px px-body"><span>CORN</span><span>6</span></div>
+          <div class="progress-track"><div class="progress-fill"></div></div>
+          <div class="px px-prompt" style="font-size:9px;margin-top:8px;">GET READY...</div>
+        </div>
+      </div>
+      <div class="screen-caption">Stage-Clear — row 30 reached. Scene freezes + 55% scrim; auto-advances in
+      1.5–2s (progress bar, no input required). Mobile-width preview: 336px (native).</div>
+    </div>
+
+    <div class="screen-block">
+      <div class="frame" id="frame-over">
+        <canvas width="336" height="576"></canvas>
+        <div class="scrim danger"></div>
+        <div class="center-panel notch-panel">
+          <div class="px px-title px-danger" style="font-size:20px;">GAME OVER</div>
+          <div class="px px-body" style="color:var(--chrome-fg-muted);margin:4px 0 10px;">Struck by train!</div>
+          <div class="stat-row px px-body"><span>SCORE</span><span>87</span></div>
+          <div class="stat-row px px-body"><span>CORN</span><span>11</span></div>
+          <div class="stat-row px px-body"><span>BEST</span><span>87 <span class="new-best">NEW BEST!</span></span></div>
+          <div class="px px-prompt" style="font-size:9px;margin-top:10px;">PRESS SPACE / TAP TO RESTART</div>
+        </div>
+      </div>
+      <div class="screen-caption">Game Over — Stage 3 (Industrial) frozen backdrop, red scrim, death-cause flavor
+      line, NEW BEST badge when applicable. Mobile-width preview: 336px (native).</div>
+    </div>
+
+    <div class="screen-block">
+      <div class="frame" id="frame-victory">
+        <canvas width="336" height="576"></canvas>
+        <div class="scrim gold"></div>
+        <div id="confetti-layer"></div>
+        <div class="center-panel notch-panel">
+          <div class="px px-title px-gold" style="font-size:22px;">VICTORY!</div>
+          <div class="stat-row px px-body"><span>SCORE</span><span>90</span></div>
+          <div class="stat-row px px-body"><span>CORN</span><span>19</span></div>
+          <div class="stat-row px px-body"><span>BEST</span><span>90 <span class="new-best">NEW BEST!</span></span></div>
+          <div class="px px-prompt" style="font-size:9px;margin-top:10px;">PRESS SPACE / TAP TO PLAY AGAIN</div>
+        </div>
+      </div>
+      <div class="screen-caption">Victory — after Stage 3 clear. Same panel system, gold scrim + gentle confetti
+      drift instead of danger red. Mobile-width preview: 336px (native).</div>
+    </div>
+  </div>
+</section>
+
+<script>
+/* ===================== shared pixel-grid helpers ===================== */
+function buildRow(ranges, len){
+  const arr = new Array(len).fill('.');
+  ranges.forEach(([s,e,ch])=>{ for(let i=s;i<=e;i++) arr[i]=ch; });
+  return arr.join('');
+}
+function drawGrid(ctx, rows, palette, ox=0, oy=0){
+  rows.forEach((row,y)=>{
+    for(let x=0;x<row.length;x++){
+      const ch = row[x];
+      if(ch==='.') continue;
+      ctx.fillStyle = palette[ch];
+      ctx.fillRect(ox+x, oy+y, 1, 1);
+    }
+  });
+}
+
+/* ===================== CHICKEN 16x16 (canonical facing = right) ===================== */
+const CHICKEN_PALETTE = { O:'#1B1611', B:'#FFF3D6', S:'#E8D5A8', C:'#E8432B', K:'#FFB020', E:'#1B1611', P:'#FFFFFF', W:'#E0B876', L:'#FFB020' };
+const CHICKEN_ROWS = [
+  buildRow([], 16),
+  buildRow([[11,12,'C']], 16),
+  buildRow([[10,10,'O'],[11,12,'C'],[13,13,'O']], 16),
+  buildRow([[9,9,'O'],[10,13,'C'],[14,14,'O']], 16),
+  buildRow([[8,8,'O'],[9,12,'B'],[13,13,'P'],[14,14,'B'],[15,15,'O']], 16),
+  buildRow([[8,8,'O'],[9,11,'B'],[12,12,'E'],[13,13,'B'],[14,15,'K']], 16),
+  buildRow([[7,7,'O'],[8,13,'B'],[14,15,'K']], 16),
+  buildRow([[5,5,'O'],[6,13,'B']], 16),
+  buildRow([[2,2,'O'],[3,3,'B'],[4,8,'W'],[9,13,'B'],[14,14,'O']], 16),
+  buildRow([[2,2,'O'],[3,3,'B'],[4,8,'W'],[9,13,'B'],[14,14,'O']], 16),
+  buildRow([[2,2,'O'],[3,13,'B'],[14,14,'O']], 16),
+  buildRow([[3,3,'O'],[4,12,'B'],[13,13,'O']], 16),
+  buildRow([[4,4,'O'],[5,11,'S'],[12,12,'O']], 16),
+  buildRow([[5,5,'O'],[6,10,'S'],[11,11,'O']], 16),
+  buildRow([[5,6,'L'],[9,10,'L']], 16),
+  buildRow([[5,6,'O'],[9,10,'O']], 16),
+];
+
+function setupChickenCanvas(id, mode){
+  const canvas = document.getElementById(id);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  let start = performance.now();
+  function frame(t){
+    const elapsed = (t - start);
+    ctx.clearRect(0,0,16,16);
+    ctx.save();
+    if(mode === 'idle'){
+      const cycle = (elapsed % 900) / 900; // slowed demo cycle
+      const bob = Math.sin(cycle * Math.PI * 2) * -1.4;
+      ctx.translate(0, bob);
+      drawGrid(ctx, CHICKEN_ROWS, CHICKEN_PALETTE);
+    } else if(mode === 'hop'){
+      const cycle = (elapsed % 900) / 900;
+      const squashY = 1 + Math.sin(cycle*Math.PI*2) * 0.16;
+      const squashX = 1 - Math.sin(cycle*Math.PI*2) * 0.12;
+      const lift = -Math.sin(cycle*Math.PI) * 3;
+      ctx.translate(8, 8 + lift);
+      ctx.scale(squashX, squashY);
+      ctx.translate(-8, -8);
+      drawGrid(ctx, CHICKEN_ROWS, CHICKEN_PALETTE);
+    } else {
+      drawGrid(ctx, CHICKEN_ROWS, CHICKEN_PALETTE);
+    }
+    ctx.restore();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+setupChickenCanvas('c-chicken-idle','idle');
+setupChickenCanvas('c-chicken-hop','hop');
+setupChickenCanvas('c-title-chicken','idle');
+
+/* ===================== VEHICLES ===================== */
+function drawCar(ctx, w, h, body, win, glow, wheel){
+  ctx.clearRect(0,0,w,h);
+  const grad = ctx.createRadialGradient(w-2,h*0.5,1,w-2,h*0.5,10);
+  grad.addColorStop(0, glow); grad.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle = grad; ctx.fillRect(w-14,0,14,h);
+  ctx.fillStyle = '#1A1A1A'; ctx.fillRect(2,4,w-6,h-6);
+  ctx.fillStyle = body; ctx.fillRect(3,5,w-8,h-8);
+  ctx.fillStyle = body; ctx.fillRect(8,1,w-20,4);
+  ctx.fillStyle = win; ctx.fillRect(10,1,4,3); ctx.fillRect(w-16,1,4,3);
+  ctx.fillStyle = wheel; ctx.fillRect(6,h-3,5,3); ctx.fillRect(w-11,h-3,5,3);
+  ctx.fillStyle = '#FFFFFF'; ctx.fillRect(w-4,Math.floor(h/2)-1,2,3);
+}
+const carCtx = document.getElementById('c-car').getContext('2d');
+carCtx.imageSmoothingEnabled=false;
+drawCar(carCtx, 32, 16, '#E4572E', '#FFF4B8', '#FFF4B8', '#1A1A1A');
+
+function drawTruck(ctx, w, h){
+  ctx.clearRect(0,0,w,h);
+  const grad = ctx.createRadialGradient(w-2,h*0.55,1,w-2,h*0.55,11);
+  grad.addColorStop(0, '#FFD24D'); grad.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle = grad; ctx.fillRect(w-15,0,15,h);
+  ctx.fillStyle = '#1A1A1A'; ctx.fillRect(1,3,w-4,h-5);
+  ctx.fillStyle = '#55524D'; ctx.fillRect(2,4,w-8,h-8); // cargo
+  ctx.fillStyle = '#3A3733'; ctx.fillRect(w-11,2,9,h-5); // cab
+  ctx.fillStyle = '#FFD24D'; ctx.fillRect(w-9,3,3,3); // window
+  ctx.fillStyle = '#FF2E2E'; ctx.fillRect(w-13,1,3,2); // hazard light bar
+  ctx.fillStyle = '#1A1A1A'; ctx.fillRect(6,h-3,5,3); ctx.fillRect(w-9,h-3,5,3);
+}
+const truckCtx = document.getElementById('c-truck').getContext('2d');
+truckCtx.imageSmoothingEnabled=false;
+drawTruck(truckCtx, 40, 18);
+
+/* ===================== LOG + LILY PAD ===================== */
+function drawLogAndPad(ctx, w, h){
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle = '#2C86B0'; ctx.fillRect(0,0,w,h); // water backdrop
+  ctx.fillStyle = '#3AA6D9'; for(let x=0;x<w;x+=6){ ctx.fillRect(x,3,3,1); }
+  // log
+  ctx.fillStyle = '#8A5C2E'; ctx.fillRect(2,3,20,7);
+  ctx.fillStyle = '#A9743F'; ctx.fillRect(3,4,18,5);
+  ctx.fillStyle = '#8A5C2E'; ctx.fillRect(4,5,16,1); ctx.fillRect(4,7,16,1);
+  ctx.fillStyle = '#C08F52'; ctx.fillRect(2,4,2,5); ctx.fillRect(20,4,2,5);
+  // lily pad
+  ctx.fillStyle = '#2C7A34'; ctx.fillRect(25,4,7,6);
+  ctx.fillStyle = '#3C9D45'; ctx.fillRect(26,5,5,4);
+  ctx.fillStyle = '#2C7A34'; ctx.fillRect(28,6,1,2);
+}
+const logCtx = document.getElementById('c-log').getContext('2d');
+logCtx.imageSmoothingEnabled=false;
+drawLogAndPad(logCtx, 32, 14);
+
+/* ===================== CORN (spin) ===================== */
+function drawCorn(ctx, squash){
+  ctx.clearRect(0,0,12,12);
+  ctx.save();
+  ctx.translate(6,6); ctx.scale(squash,1); ctx.translate(-6,-6);
+  ctx.fillStyle = '#7ABF4C'; ctx.fillRect(3,7,6,4);
+  ctx.fillStyle = '#FFD23F';
+  ctx.fillRect(3,2,2,2); ctx.fillRect(6,2,2,2); ctx.fillRect(4,4,2,2); ctx.fillRect(7,4,2,2); ctx.fillRect(3,6,6,1);
+  ctx.restore();
+}
+(function(){
+  const canvas = document.getElementById('c-corn');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  let start = performance.now();
+  function frame(t){
+    const cycle = ((t-start) % 480) / 480;
+    const squash = Math.cos(cycle*Math.PI*2)*0.85; // ranges -0.85..0.85, abs gives spin+flip feel
+    drawCorn(ctx, Math.max(0.12, Math.abs(squash)));
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+
+/* ===================== TRAIN + SIGNAL ===================== */
+function drawTrain(ctx, w, h, offset){
+  ctx.clearRect(0,0,w,h);
+  // trailing ghost cars (motion blur)
+  for(let i=3;i>=1;i--){
+    ctx.globalAlpha = 0.15*i;
+    ctx.fillStyle = '#3A3733';
+    ctx.fillRect(6 + i*9 + offset, 4, 8, h-8);
+  }
+  ctx.globalAlpha = 1;
+  // cars
+  for(let i=0;i<3;i++){
+    ctx.fillStyle = '#3A3733';
+    ctx.fillRect(6 + i*22 + offset, 2, 18, h-4);
+    ctx.fillStyle = '#C7C2B8';
+    ctx.fillRect(9 + i*22 + offset, 5, 4, 3);
+  }
+  // headlamp glow on leading car
+  const grad = ctx.createRadialGradient(6+offset, h/2, 1, 6+offset, h/2, 10);
+  grad.addColorStop(0, '#FFE9A6'); grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad; ctx.fillRect(0,0,16,h);
+  // signal box
+  ctx.fillStyle = '#171310'; ctx.fillRect(w-10,2,8,h-4);
+}
+(function(){
+  const canvas = document.getElementById('c-train');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  let start = performance.now();
+  function frame(t){
+    const cycle = ((t-start) % 2000) / 2000;
+    const offset = Math.floor(-10 + cycle*60);
+    drawTrain(ctx, 72, 20, offset);
+    // signal light blink
+    const on = Math.floor((t-start)/200) % 2 === 0;
+    ctx.fillStyle = on ? '#FF2E2E' : '#3A140F';
+    ctx.fillRect(64,5,3,3);
+    ctx.fillStyle = on ? '#3A140F' : '#FF2E2E';
+    ctx.fillRect(64,11,3,3);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+
+/* ===================== EAGLE ===================== */
+function drawEagle(ctx){
+  ctx.clearRect(0,0,24,24);
+  ctx.fillStyle = '#1B1611';
+  ctx.fillRect(2,10,20,3); // wing outline base
+  ctx.fillStyle = '#4A3B32';
+  ctx.fillRect(3,11,18,2);
+  ctx.fillStyle = '#4A3B32';
+  ctx.fillRect(9,7,6,9); // body
+  ctx.fillStyle = '#E8DCC8';
+  ctx.fillRect(10,7,4,3); // head
+  ctx.fillStyle = '#FFB020';
+  ctx.fillRect(13,8,2,1); // beak
+  ctx.fillStyle = '#1B1611';
+  ctx.fillRect(11,8,1,1); // eye
+  ctx.fillStyle = '#FFB020';
+  ctx.fillRect(9,16,2,2); ctx.fillRect(13,16,2,2); // talons
+}
+const eagleCtx = document.getElementById('c-eagle').getContext('2d');
+eagleCtx.imageSmoothingEnabled=false;
+drawEagle(eagleCtx);
+
+/* ===================== PARTICLE DEMOS ===================== */
+function particleLoop(id, spawn, life){
+  const canvas = document.getElementById(id);
+  const ctx = canvas.getContext('2d');
+  let particles = [];
+  let last = 0;
+  function tick(t){
+    if(t - last > life){ particles = spawn(); last = t; }
+    ctx.clearRect(0,0,32,32);
+    const age = Math.min(1, (t-last)/life);
+    particles.forEach(p=>{
+      const x = 16 + p.vx*age*14;
+      const y = 16 + p.vy*age*14 + (p.gravity ? p.gravity*age*age*10 : 0);
+      ctx.globalAlpha = 1-age;
+      ctx.fillStyle = p.color;
+      ctx.fillRect(x, y, p.size, p.size);
+    });
+    ctx.globalAlpha = 1;
+    if(!particles._ring){} // noop
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+particleLoop('c-dust', ()=>{
+  const arr=[]; for(let i=0;i<5;i++){ const a=(i/5)*Math.PI*2; arr.push({vx:Math.cos(a),vy:Math.sin(a)*0.4-0.3,color:'#C9BFA6',size:2}); } return arr;
+}, 260);
+particleLoop('c-feather', ()=>{
+  const arr=[]; for(let i=0;i<8;i++){ const a=(i/8)*Math.PI*2; arr.push({vx:Math.cos(a)*1.4,vy:Math.sin(a)*1.2,gravity:1,color: i%2? '#FFF3D6':'#E0B876',size:2}); } return arr;
+}, 620);
+particleLoop('c-splash', ()=>{
+  const arr=[]; for(let i=0;i<10;i++){ const a=(i/10)*Math.PI*2; arr.push({vx:Math.cos(a)*1.1,vy:Math.sin(a)*1.1-0.5,gravity:1,color: i%2? '#BEEFFF':'#3AA6D9',size:2}); } return arr;
+}, 520);
+particleLoop('c-sparkle', ()=>{
+  const arr=[]; for(let i=0;i<6;i++){ const a=(i/6)*Math.PI*2; arr.push({vx:Math.cos(a),vy:Math.sin(a),color: i%2? '#FFD23F':'#FFFFFF',size:2}); } return arr;
+}, 300);
+
+/* ===================== SCREEN BACKGROUND SCENES ===================== */
+const TILE = 48, COLS = 7, ROWS = 12;
+
+function skyGradient(ctx, top, bottom, h){
+  const g = ctx.createLinearGradient(0,0,0,h);
+  g.addColorStop(0, top); g.addColorStop(1, bottom);
+  ctx.fillStyle = g; ctx.fillRect(0,0,336,h);
+}
+
+function sceneStage1(ctx){
+  skyGradient(ctx, '#8FD3F4', '#C9F2C0', 144);
+  ctx.fillStyle = '#FFE066'; ctx.beginPath(); ctx.arc(270,40,20,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#A6DE7A'; ctx.fillRect(0,96,336,24);
+  ctx.fillStyle = '#7FC24C'; ctx.fillRect(0,116,336,28);
+  const rows = ['grass','road','grass','river','grass','road','grass','road','grass'];
+  rows.forEach((type,i)=>{
+    const y = 144 + i*48;
+    if(type==='grass'){
+      ctx.fillStyle = i%2? '#4F9A28':'#6ABE30'; ctx.fillRect(0,y,336,48);
+      ctx.fillStyle = '#2E7D32'; ctx.fillRect(3*TILE+10,y+4,20,20);
+      ctx.fillStyle = '#6B4226'; ctx.fillRect(3*TILE+16,y+22,8,16);
+    } else if(type==='road'){
+      ctx.fillStyle = i%2? '#43434C':'#4A4A55'; ctx.fillRect(0,y,336,48);
+      ctx.fillStyle = '#F4E285'; for(let x=4;x<336;x+=16){ ctx.fillRect(x,y+22,8,4); }
+      ctx.fillStyle = '#E4572E'; ctx.fillRect(60,y+16,26,16);
+      ctx.fillStyle = '#3C91E6'; ctx.fillRect(200,y+16,26,16);
+    } else if(type==='river'){
+      ctx.fillStyle = '#3AA6D9'; ctx.fillRect(0,y,336,48);
+      ctx.fillStyle = '#BEEFFF'; for(let x=0;x<336;x+=20){ ctx.fillRect(x,y+10,10,2); ctx.fillRect(x+8,y+30,10,2); }
+      ctx.fillStyle = '#A9743F'; ctx.fillRect(120,y+16,60,16);
+    }
+  });
+}
+
+function sceneStage2(ctx){
+  skyGradient(ctx, '#1A1A2E', '#16213E', 144);
+  ctx.fillStyle = '#E8E8F0';
+  for(let i=0;i<24;i++){ ctx.fillRect((i*37)%336, (i*53)%110, 1, 1); }
+  ctx.fillStyle = '#0F1024'; ctx.fillRect(0,90,336,30);
+  ctx.fillStyle = '#23233A'; ctx.fillRect(0,112,336,32);
+  ctx.fillStyle = '#FFCB57';
+  for(let x=10;x<330;x+=22){ if((x/22)%3!==0) ctx.fillRect(x,120,6,6); }
+  const rows = ['grass','road','road','river','grass','road','road','grass','road'];
+  rows.forEach((type,i)=>{
+    const y = 144 + i*48;
+    if(type==='grass'){
+      ctx.fillStyle = i%2? '#24532F':'#2F6B3D'; ctx.fillRect(0,y,336,48);
+    } else if(type==='road'){
+      ctx.fillStyle = i%2? '#26262F':'#2B2B36'; ctx.fillRect(0,y,336,48);
+      ctx.fillStyle = '#FFD866'; for(let x=4;x<336;x+=16){ ctx.fillRect(x,y+22,8,4); }
+      ctx.fillStyle = '#464655'; ctx.fillRect(90,y+16,30,16);
+      ctx.fillStyle = '#FFF6D0'; ctx.fillRect(118,y+20,8,8);
+    } else if(type==='river'){
+      ctx.fillStyle = '#1D4E63'; ctx.fillRect(0,y,336,48);
+      ctx.fillStyle = '#7FD8E8'; for(let x=0;x<336;x+=20){ ctx.fillRect(x,y+18,10,2); }
+    }
+  });
+}
+
+function sceneStage3(ctx){
+  skyGradient(ctx, '#2A211C', '#1B1613', 144);
+  ctx.fillStyle = '#171310'; ctx.fillRect(40,60,16,84); ctx.fillRect(240,40,18,104);
+  ctx.fillStyle = '#FF7A29'; ctx.globalAlpha=0.6; ctx.fillRect(46,50,3,3); ctx.fillRect(248,28,3,3); ctx.globalAlpha=1;
+  const rows = ['ground','road','rail','ground','road','rail','ground','road','rail'];
+  rows.forEach((type,i)=>{
+    const y = 144 + i*48;
+    if(type==='ground'){
+      ctx.fillStyle = i%2? '#5A5245':'#6B6153'; ctx.fillRect(0,y,336,48);
+      ctx.fillStyle = '#C0392B'; ctx.fillRect(150,y+16,14,20);
+    } else if(type==='road'){
+      ctx.fillStyle = i%2? '#332E29':'#3A342E'; ctx.fillRect(0,y,336,48);
+      ctx.fillStyle = '#FFB100'; for(let x=0;x<336;x+=16){ ctx.fillRect(x,y+22,8,4); }
+      ctx.fillStyle = '#1A1A1A'; for(let x=8;x<336;x+=16){ ctx.fillRect(x,y+22,8,4); }
+    } else if(type==='rail'){
+      ctx.fillStyle = '#4A423A'; ctx.fillRect(0,y,336,48);
+      ctx.fillStyle = '#8B5E3C'; for(let x=2;x<336;x+=10){ ctx.fillRect(x,y+10,4,28); }
+      ctx.fillStyle = '#C7C2B8'; ctx.fillRect(0,y+14,336,3); ctx.fillRect(0,y+30,336,3);
+      ctx.fillStyle = '#FF2E2E'; ctx.fillRect(300,y+6,6,6);
+    }
+  });
+}
+
+['frame-title'].forEach(id=>{
+  const ctx = document.querySelector('#'+id+' canvas').getContext('2d');
+  ctx.imageSmoothingEnabled=false; sceneStage1(ctx);
+});
+['frame-hud'].forEach(id=>{
+  const ctx = document.querySelector('#'+id+' canvas').getContext('2d');
+  ctx.imageSmoothingEnabled=false; sceneStage2(ctx);
+});
+['frame-clear'].forEach(id=>{
+  const ctx = document.querySelector('#'+id+' canvas').getContext('2d');
+  ctx.imageSmoothingEnabled=false; sceneStage1(ctx);
+});
+['frame-over','frame-victory'].forEach(id=>{
+  const ctx = document.querySelector('#'+id+' canvas').getContext('2d');
+  ctx.imageSmoothingEnabled=false; sceneStage3(ctx);
+});
+
+/* ===================== confetti (victory) ===================== */
+(function(){
+  const layer = document.getElementById('confetti-layer');
+  const colors = ['#DC2626','#2563EB','#22C55E','#FFD23F'];
+  for(let i=0;i<16;i++){
+    const d = document.createElement('div');
+    d.className = 'confetti';
+    d.style.left = Math.round(Math.random()*330)+'px';
+    d.style.background = colors[i%colors.length];
+    d.style.animationDuration = (3+Math.random()*2)+'s';
+    d.style.animationDelay = (Math.random()*3)+'s';
+    layer.appendChild(d);
+  }
+})();
+
+/* ===================== palette swatch rendering ===================== */
+const STAGE_PALETTES = [
+  { name:'Stage 1 — Countryside (Day)', mood:'Bright, saturated, generous safe margins.', chips:[
+    ['Sky top','#8FD3F4'],['Sky bottom','#C9F2C0'],['Sun','#FFE066'],
+    ['Grass','#6ABE30'],['Grass alt','#4F9A28'],['Road','#4A4A55'],['Lane marking','#F4E285'],
+    ['River','#3AA6D9'],['River foam','#BEEFFF'],['Tree canopy','#2E7D32'],['Rock','#9C9C9C'],
+    ['Car red','#E4572E'],['Car blue','#3C91E6'],['Headlight glow','#FFF4B8'],
+  ]},
+  { name:'Stage 2 — City (Night)', mood:'Cooler, moodier, warm sodium-lamp glow pools.', chips:[
+    ['Sky top','#1A1A2E'],['Sky bottom','#16213E'],['Skyline','#0F1024'],
+    ['Grass (park)','#2F6B3D'],['Road','#2B2B36'],['Lane marking','#FFD866'],
+    ['River (canal)','#1D4E63'],['River foam','#7FD8E8'],['Window lit','#FFCB57'],
+    ['Streetlight glow','#FFD866'],['Car body','#464655'],['Taxi','#F4C430'],['Neon accent','#17E9E0'],
+  ]},
+  { name:'Stage 3 — Industrial (Hazard-lit)', mood:'Desaturated grime punctuated by red/amber hazard light.', chips:[
+    ['Sky top','#2A211C'],['Sky bottom','#1B1613'],['Ember','#FF7A29'],
+    ['Ground','#6B6153'],['Road','#3A342E'],['Hazard stripe','#FFB100'],
+    ['Rail bed','#4A423A'],['Rail metal','#C7C2B8'],['Signal red','#FF2E2E'],['Signal amber','#FFB100'],
+    ['Obstacle barrel','#C0392B'],['Truck body','#55524D'],['Headlight glow','#FFD24D'],
+  ]},
+];
+const CHROME_PALETTE = [
+  ['Chrome bg','#0F172A'],['Chrome panel','#192134'],['Border','rgba(255,255,255,0.10)'],
+  ['Foreground','#FFFFFF'],['Foreground muted','#94A3B8'],['Primary (danger)','#DC2626'],
+  ['Secondary','#2563EB'],['Accent (score)','#22C55E'],['Gold (corn/best)','#FFD23F'],['Warning','#FFB100'],
+];
+
+function renderPaletteCard(container, name, mood, chips){
+  const card = document.createElement('div');
+  card.className = 'palette-card';
+  card.innerHTML = `<h4>${name}</h4>${mood ? `<div class="mood">${mood}</div>` : ''}`;
+  chips.forEach(([label,hex])=>{
+    const row = document.createElement('div');
+    row.className = 'chip-row';
+    row.innerHTML = `<span class="chip" style="background:${hex}"></span><span class="chip-label">${label}</span><span class="chip-hex">${hex}</span>`;
+    card.appendChild(row);
+  });
+  container.appendChild(card);
+}
+const paletteGrid = document.getElementById('palette-grid');
+STAGE_PALETTES.forEach(p=> renderPaletteCard(paletteGrid, p.name, p.mood, p.chips));
+const chromeGrid = document.getElementById('chrome-grid');
+renderPaletteCard(chromeGrid, 'Chrome / Meta', 'Constant across all 3 stages.', CHROME_PALETTE);
+</script>
+</body>
+</html>
