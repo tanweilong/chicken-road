@@ -525,6 +525,11 @@ class Lane {
       ctx.fillStyle=c.rock; ctx.fillRect(x-6, top+TILE-24, 12, 8);
     }
   }
+  renderProps(ctx, top){
+    if(this.train){ this.train.renderSignal(ctx, top); this.train.render(ctx, top); }
+    for(const v of this.vehicles) v.render(ctx, top);
+    for(const l of this.logs) l.render(ctx, top);
+  }
   _drawCorn(ctx, top){
     const x=colCenterX(this.corn.col), y=top+TILE/2;
     const cycle=(this.corn.phase*1000%480)/480;
@@ -534,6 +539,159 @@ class Lane {
     ctx.fillStyle='#FFD23F';
     ctx.fillRect(3,2,2,2); ctx.fillRect(6,2,2,2); ctx.fillRect(4,4,2,2); ctx.fillRect(7,4,2,2); ctx.fillRect(3,6,6,1);
     ctx.restore();
+  }
+}
+
+/* ---------------------------------------------------------------------
+   3c-i. Vehicle — road hazard w/ headlight glow (DESIGN.md §4.2)
+   --------------------------------------------------------------------- */
+class Vehicle {
+  constructor(x, speed, dir, kind, w, col){
+    this.x=x; this.speed=speed; this.dir=dir; this.kind=kind; // car|truck|bus
+    this.w = w; this.h = 30;
+    this.color = col.body; this.win = col.win; this.glow = col.glow; this.tail = col.tail;
+  }
+  update(dt){
+    this.x += this.speed*this.dir*dt;
+    const pad = this.w/2 + 20;
+    if(this.dir>0 && this.x > WORLD_W+pad) this.x = -pad;
+    else if(this.dir<0 && this.x < -pad) this.x = WORLD_W+pad;
+  }
+  hits(px){ return Math.abs(px - this.x) < (this.w/2 + 12); }
+  render(ctx, top){
+    const y = top + (TILE-this.h)/2, w=this.w, h=this.h, x=this.x;
+    // headlight glow (the one allowed soft-edge element)
+    const gx = x + this.dir*(w/2);
+    const grad = ctx.createRadialGradient(gx,y+h/2,1,gx,y+h/2,22);
+    grad.addColorStop(0,this.glow); grad.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=grad; ctx.fillRect(gx-22,y-6,44,h+12);
+    // tail light
+    if(this.tail){ ctx.fillStyle=this.tail; ctx.fillRect(x-this.dir*(w/2)-1,y+h/2-3,3,6); }
+    // body
+    ctx.fillStyle='#1A1A1A'; ctx.fillRect(x-w/2, y, w, h);            // outline/wheels base
+    ctx.fillStyle=this.color; ctx.fillRect(x-w/2+2, y+2, w-4, h-4);
+    // cabin/windows
+    ctx.fillStyle=this.win;
+    if(this.kind==='truck'){
+      const cabX = this.dir>0 ? x+w/2-12 : x-w/2+4;
+      ctx.fillStyle=this.color; // cab differentiation via darker handled by color already
+      ctx.fillStyle=this.win; ctx.fillRect(cabX, y+5, 8, 8);
+    } else if(this.kind==='bus'){
+      for(let i=0;i<4;i++) ctx.fillRect(x-w/2+8+i*(w-16)/4, y+6, (w-20)/4-2, 8);
+    } else {
+      ctx.fillRect(x-w/2+7, y+5, (w-16)/2-1, 8);
+      ctx.fillRect(x+3, y+5, (w-16)/2-1, 8);
+    }
+    // wheels
+    ctx.fillStyle='#0D0D0D';
+    ctx.fillRect(x-w/2+5, y+h-4, 7, 4); ctx.fillRect(x+w/2-12, y+h-4, 7, 4);
+  }
+}
+
+/* ---------------------------------------------------------------------
+   3c-ii. Log / lily pad — river platform (DESIGN.md §4.3)
+   --------------------------------------------------------------------- */
+class Log {
+  constructor(x, speed, dir, w, col, isPad){
+    this.x=x; this.speed=speed; this.dir=dir; this.w=w; this.h=20;
+    this.col=col; this.isPad=isPad; this.bob=Math.random()*Math.PI*2;
+  }
+  update(dt){
+    this.x += this.speed*this.dir*dt; this.bob += dt*5;
+    const pad=this.w/2+24;
+    if(this.dir>0 && this.x>WORLD_W+pad) this.x=-pad;
+    else if(this.dir<0 && this.x<-pad) this.x=WORLD_W+pad;
+  }
+  carries(px){ return Math.abs(px - this.x) < this.w/2; }
+  render(ctx, top){
+    const y = top + (TILE-this.h)/2 + Math.sin(this.bob)*1;
+    const x=this.x, w=this.w;
+    if(this.isPad){
+      ctx.fillStyle=this.col.logDark; ctx.fillRect(x-w/2, y+2, w, this.h-4);
+      ctx.fillStyle='#3C9D45'; ctx.fillRect(x-w/2+2, y+3, w-4, this.h-6);
+      ctx.fillStyle='#2C7A34'; ctx.fillRect(x-1, y+4, 2, this.h-8);
+    } else {
+      ctx.fillStyle=this.col.logDark; ctx.fillRect(x-w/2, y, w, this.h);
+      ctx.fillStyle=this.col.logBody; ctx.fillRect(x-w/2+2, y+2, w-4, this.h-4);
+      ctx.fillStyle=this.col.logDark; ctx.fillRect(x-w/2+3, y+6, w-6, 1); ctx.fillRect(x-w/2+3, y+13, w-6, 1);
+      ctx.fillStyle=this.col.logHi; ctx.fillRect(x-w/2, y+3, 3, this.h-6); ctx.fillRect(x+w/2-3, y+3, 3, this.h-6);
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------
+   3c-iii. Train — telegraphed fast rail hazard (DESIGN.md §4.4)
+   --------------------------------------------------------------------- */
+class Train {
+  constructor(cfg, col){
+    this.cfg=cfg; this.col=col;
+    this.state='idle';                       // idle → warn → pass → cooldown
+    this.timer = 1.5 + Math.random()*3.5;
+    this.dir = Math.random()<0.5?1:-1;
+    this.x = 0; this.speed = cfg.trainSpeed;
+    this.warnDur = cfg.warn; this.blink=0;
+    this.len = 5*32;                         // multi-car length
+  }
+  update(dt){
+    this.timer -= dt; this.blink += dt;
+    if(this.state==='idle'){
+      if(this.timer<=0){ this.state='warn'; this.timer=this.warnDur; this.blink=0; this._belled=false; }
+    } else if(this.state==='warn'){
+      // bell on each blink cycle
+      const on = Math.floor(this.blink/0.2)%2===0;
+      if(on && !this._belled){ this.game && this.game.audio.bell(); }
+      if(this.timer<=0){
+        this.state='pass';
+        this.dir = Math.random()<0.5?1:-1;
+        this.x = this.dir>0 ? -this.len/2-30 : WORLD_W+this.len/2+30;
+      }
+    } else if(this.state==='pass'){
+      this.x += this.speed*this.dir*dt;
+      if((this.dir>0 && this.x > WORLD_W+this.len/2+30) ||
+         (this.dir<0 && this.x < -this.len/2-30)){
+        this.state='cooldown'; this.timer = 0.6 + Math.random()*1.5;
+      }
+    } else if(this.state==='cooldown'){
+      if(this.timer<=0){ this.state='idle'; this.timer=2+Math.random()*4; }
+    }
+  }
+  active(){ return this.state==='pass'; }
+  warning(){ return this.state==='warn'; }
+  hits(px){
+    if(this.state!=='pass') return false;
+    return Math.abs(px - this.x) < this.len/2;
+  }
+  renderSignal(ctx, top){
+    // pole-mounted twin-lamp signal at right edge
+    const sx=VW-12, sy=top+6;
+    ctx.fillStyle='#171310'; ctx.fillRect(sx-2, sy-2, 10, 22);
+    const warn=this.warning();
+    const on = warn && (Math.floor(this.blink/0.2)%2===0);
+    ctx.fillStyle = on ? this.col.signal : this.col.signalOff; ctx.fillRect(sx, sy, 5,5);
+    ctx.fillStyle = (warn && !on) ? this.col.signal : this.col.signalOff; ctx.fillRect(sx, sy+9, 5,5);
+  }
+  render(ctx, top){
+    if(this.state!=='pass') return;
+    const y = top+6, h=TILE-12;
+    // motion-blur ghosts
+    for(let i=3;i>=1;i--){
+      ctx.globalAlpha=0.12*i;
+      ctx.fillStyle=this.col.railRust;
+      ctx.fillRect(this.x - this.dir*(i*14) - this.len/2, y, this.len, h);
+    }
+    ctx.globalAlpha=1;
+    // cars
+    for(let i=0;i<5;i++){
+      const cx = this.x - this.len/2 + i*32 + 2;
+      ctx.fillStyle='#22201d'; ctx.fillRect(cx, y, 28, h);
+      ctx.fillStyle=this.col.railMetal; ctx.fillRect(cx+3, y+5, 6, 5);
+      ctx.fillStyle=this.col.railMetal; ctx.fillRect(cx+3, y+h-4, 22, 2);
+    }
+    // headlamp glow on leading car
+    const gx = this.x + this.dir*(this.len/2);
+    const grad=ctx.createRadialGradient(gx,y+h/2,1,gx,y+h/2,26);
+    grad.addColorStop(0,'#FFE9A6'); grad.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=grad; ctx.fillRect(gx-26,y-8,52,h+16);
   }
 }
 
@@ -884,7 +1042,37 @@ class Game {
     do { col=Math.random()*COLS|0; tries++; } while(lane.blocks(col) && tries<8);
     if(!lane.blocks(col)) lane.corn = { col, phase:Math.random(), collected:false };
   }
-  _populateHazards(lane, cfg){ /* Vehicle/Log/Train population added in chunk 4 */ }
+  _populateHazards(lane, cfg){
+    const c = cfg.col;
+    if(lane.type==='road'){
+      const dir = Math.random()<0.5?1:-1;
+      const [lo,hi] = cfg.vehPerLane;
+      const n = lo + (Math.random()*(hi-lo+1)|0);
+      const speed = cfg.vMin + Math.random()*(cfg.vMax-cfg.vMin);
+      const spacing = WORLD_W/n;
+      for(let i=0;i<n;i++){
+        let kind='car', w=44;
+        const r=Math.random();
+        if(this.stage>=1 && r<0.25){ kind='bus'; w=96; }
+        else if(r<0.45){ kind='truck'; w=74; }
+        const carColor = c.cars[(i + (Math.random()*c.cars.length|0)) % c.cars.length];
+        const vcol = { body:carColor, win:c.carWin, glow:c.headlight, tail:c.taillight||null };
+        lane.vehicles.push(new Vehicle(i*spacing + Math.random()*10, speed, dir, kind, w, vcol));
+      }
+    } else if(lane.type==='river'){
+      const dir = Math.random()<0.5?1:-1;
+      const speed = cfg.logMin + Math.random()*(cfg.logMax-cfg.logMin);
+      const n = 2 + (Math.random()<0.5?1:0);
+      const spacing = WORLD_W/n;
+      for(let i=0;i<n;i++){
+        const isPad = Math.random()<0.25;
+        const w = isPad ? 40 : (Math.random()<0.5?96:72);
+        lane.logs.push(new Log(i*spacing + Math.random()*20, speed, dir, w, c, isPad));
+      }
+    } else if(lane.type==='rail'){
+      const t = new Train(cfg, c); t.game = this; lane.train = t;
+    }
+  }
   laneAt(row){ return this.lanes[row] || null; }
   dustTint(){
     const l = this.player && this.laneAt(this.player.row);
@@ -896,16 +1084,64 @@ class Game {
     const p = this.player;
     if(p.row > this.furthest){ this.furthest = p.row; }
     this.score = this.stageBase + this.furthest + this.corn*3;
+    const lane = this.laneAt(p.row);
+    if(!lane){ return; }
+    // resolve landing per lane type
+    if(lane.type==='river'){
+      let ride=null;
+      for(const l of lane.logs){ if(l.carries(p.x)){ ride=l; break; } }
+      if(ride){ p.ridingLog=ride; p.rideOffset = p.x - ride.x; }
+      else { this.killPlayer('water'); return; }
+    } else if(lane.type==='road'){
+      for(const v of lane.vehicles){ if(v.hits(p.x)){ this.killPlayer('car'); return; } }
+    } else if(lane.type==='rail'){
+      if(lane.train && lane.train.hits(p.x)){ this.killPlayer('train'); return; }
+    }
+    this._collectCorn(lane);
     if(p.row >= STAGE_ROWS){ /* stage clear — wired in chunk 6 */ }
+  }
+  _collectCorn(lane){
+    if(lane && lane.corn && !lane.corn.collected && colOf(this.player.x)===lane.corn.col){
+      lane.corn.collected = true; this.corn++;
+      this.score = this.stageBase + this.furthest + this.corn*3;
+      const top = this.camera.tileTop(lane.row);
+      this.particles.sparkle(colCenterX(lane.corn.col), top+TILE/2);
+      this.audio.corn();
+      this._cornPulse = 0.15;
+    }
+  }
+  /* per-frame hazard check while the chicken is grounded (PRD §7.3) */
+  resolveGrounded(){
+    const p=this.player; if(!p || p.dead || p.hopping) return;
+    const lane=this.laneAt(p.row); if(!lane) return;
+    if(lane.type==='road'){
+      for(const v of lane.vehicles){ if(v.hits(p.x)){ this.killPlayer('car'); return; } }
+    } else if(lane.type==='rail'){
+      if(lane.train && lane.train.hits(p.x)){ this.killPlayer('train'); return; }
+    } else if(lane.type==='river'){
+      if(!p.ridingLog){ this.killPlayer('water'); return; }
+    }
+    this._collectCorn(lane);
   }
   killPlayer(cause){
     if(!this.player || this.player.dead) return;
-    this.player.die(cause==='water'||cause==='river-edge' ? 'water' : cause);
+    const water = (cause==='water'||cause==='river-edge');
+    this.player.die(water ? 'water' : cause);
     this._deathCause = cause;
-    // full death flow (shake/slow-mo/particles) refined in chunk 5
+    const px = this.player.x;
+    const py = this.camera.tileTop(this.player.row) + TILE/2;
+    const cfg = this.stageCfg().col;
+    if(water){
+      this.particles.splash(px, py, cfg.foam, cfg.river);
+      this.audio.splash();
+    } else {
+      this.particles.feathers(px, py);
+      this.camera.shake(9);                 // hard-impact shake (DESIGN §5.5)
+      this.audio.death();
+    }
+    this._flash = 0.15;                       // slow-mo white flash (DESIGN §5.6)
     this.state = S.DYING;
     this._dyingT = 0;
-    this.audio.death();
   }
   gameOver(cause){
     this._deathCause = cause || this._deathCause;
@@ -934,8 +1170,10 @@ class Game {
     if(this.state===S.PLAYING){
       this.player.update(dt);
       for(const lane of this.lanes) lane.update(dt);
+      this.resolveGrounded();
       this.camera.update(dt, this.player, true);
       this.particles.update(dt);
+      if(this._cornPulse>0) this._cornPulse-=dt;
       this._checkFallBehind();
     } else if(this.state===S.DYING){
       this._dyingT = (this._dyingT||0) + dt;
