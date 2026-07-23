@@ -1092,6 +1092,37 @@ class Game {
     }
   }
   laneAt(row){ return this.lanes[row] || null; }
+  /* QA hook helper (BUG-5): after a hops= teleport, neutralize whatever hazard
+     is currently occupying the landing tile so the dev jump is reliably safe
+     rather than a coin-flip into instant death. */
+  _ensureSafeLanding(){
+    const p = this.player; if(!p) return;
+    const lane = this.laneAt(p.row); if(!lane) return;
+    if(lane.type==='road'){
+      // clear the whole lane rather than just the overlapping vehicle — a
+      // "near miss" vehicle at teleport time can still close the gap and
+      // kill the player a few frames later since they're standing still.
+      lane.vehicles = [];
+    } else if(lane.type==='rail'){
+      if(lane.train){ lane.train.state='idle'; lane.train.timer = 2+Math.random()*4; }
+    } else if(lane.type==='river'){
+      let ride=null;
+      for(const l of lane.logs){ if(l.carries(p.x)){ ride=l; break; } }
+      if(!ride && lane.logs.length){
+        // pick whichever log has the most room before it would carry the
+        // player off either edge (WORLD_W-6 kill threshold in Player.update),
+        // not just the first log, so we don't hand the player a log that's
+        // about to sweep them away within a frame or two.
+        ride = lane.logs.reduce((best, l) => {
+          const margin = Math.min(l.x - 6, WORLD_W - 6 - l.x);
+          const bestMargin = best ? Math.min(best.x - 6, WORLD_W - 6 - best.x) : -Infinity;
+          return margin > bestMargin ? l : best;
+        }, null);
+        p.x = ride.x;
+      }
+      if(ride){ p.ridingLog = ride; p.rideOffset = p.x - ride.x; }
+    }
+  }
   dustTint(){
     const l = this.player && this.laneAt(this.player.row);
     if(!l) return '#C9BFA6';
@@ -1513,13 +1544,20 @@ window.addEventListener('load', ()=>{
   // dev aid (also handy for QA): file://.../index.html?autostart=1&stage=2
   const q = new URLSearchParams(location.search);
   if(q.get('autostart')){
-    game.stage = Math.max(0, Math.min(2, parseInt(q.get('stage')||'0',10)));
+    // BUG-3 fix: guard against non-numeric/garbage params (e.g. ?stage=abc) —
+    // parseInt('abc') -> NaN would otherwise propagate into STAGES[NaN] and crash.
+    const rawStage = parseInt(q.get('stage'), 10);
+    game.stage = Number.isFinite(rawStage) ? Math.max(0, Math.min(2, rawStage)) : 0;
     game.stageBase = game.stage*STAGE_ROWS;
     game._startStage();
     game.state = S.PLAYING;
-    const hops = parseInt(q.get('hops')||'0',10);
+    const rawHops = parseInt(q.get('hops'), 10);
+    const hops = Number.isFinite(rawHops) ? Math.max(0, rawHops) : 0;
     for(let i=0;i<hops;i++){ if(game.player) { game.player.row++; game.player.x = colCenterX(3); } }
-    if(game.player){ game.furthest = game.player.row; game.camera.y = game.player.row - LEAD; game.camera.minY = game.camera.y; }
+    if(game.player){
+      game.furthest = game.player.row; game.camera.y = game.player.row - LEAD; game.camera.minY = game.camera.y;
+      game._ensureSafeLanding(); // BUG-5 fix: neutralize whatever hazard occupies the landing tile
+    }
     const scr = q.get('screen');
     if(scr){
       game.score=87; game.corn=11; game.highScore=87; game.newBest=true;
