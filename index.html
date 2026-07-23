@@ -145,6 +145,145 @@ function drawText(ctx, str, x, y, sc, color, align, outline){
 }
 
 /* ---------------------------------------------------------------------
+   1b. Chicken sprite — 16x16 pixel map (DESIGN.md §4.1, ported from
+   design/style-guide.html PIXEL_MAPS). Canonical facing = right.
+   --------------------------------------------------------------------- */
+const CHICKEN_PAL = { O:'#1B1611', B:'#FFF3D6', S:'#E8D5A8', C:'#E8432B',
+                      K:'#FFB020', E:'#1B1611', P:'#FFFFFF', W:'#E0B876', L:'#FFB020' };
+const CHICKEN_ROWS = [
+  "................",
+  "...........CC...",
+  "..........OCCO..",
+  ".........OCCCCO.",
+  "........OBBBBPBO",
+  "........OBBBEBKK",
+  ".......OBBBBBBKK",
+  ".....OBBBBBBBB..",
+  "..OBWWWWWBBBBBO.",
+  "..OBWWWWWBBBBBO.",
+  "..OBBBBBBBBBBBO.",
+  "...OBBBBBBBBBO..",
+  "....OSSSSSSSO...",
+  ".....OSSSSSO....",
+  ".....LL..LL.....",
+  ".....OO..OO....."
+];
+/* draws chicken in 16x16 sprite space; headDy bobs the head rows (0-6),
+   wingOut adds flared wing pixels for the mid-hop flap pose. */
+function drawChickenSprite(ctx, headDy, wingOut){
+  headDy = headDy||0;
+  for(let y=0;y<16;y++){
+    const row = CHICKEN_ROWS[y];
+    const dy = (y<=6) ? headDy : 0;
+    for(let x=0;x<16;x++){
+      const ch = row[x];
+      if(ch==='.') continue;
+      ctx.fillStyle = CHICKEN_PAL[ch];
+      ctx.fillRect(x, y+dy, 1, 1);
+    }
+  }
+  if(wingOut){
+    ctx.fillStyle = '#1B1611';
+    ctx.fillRect(1,7,3,3); ctx.fillRect(12,7,3,3);
+    ctx.fillStyle = '#E0B876';
+    ctx.fillRect(1,7,2,2); ctx.fillRect(13,7,2,2);
+  }
+}
+
+/* grid helpers ------------------------------------------------------- */
+function colCenterX(c){ return c*TILE + TILE/2; }
+function colOf(x){ return Math.max(0, Math.min(COLS-1, Math.round(x/TILE - 0.5))); }
+
+/* ---------------------------------------------------------------------
+   1c. Particle system (DESIGN.md §5) — dust, feathers, splash, sparkle,
+   expanding rings, ambient. All simple filled shapes, no images.
+   --------------------------------------------------------------------- */
+class Particle {
+  constructor(o){
+    this.x=o.x; this.y=o.y; this.vx=o.vx||0; this.vy=o.vy||0;
+    this.g=o.g||0; this.size=o.size||2; this.color=o.color||'#fff';
+    this.life=o.life||0.3; this.max=this.life; this.type=o.type||'rect';
+    this.rot=Math.random()*Math.PI; this.vr=(Math.random()-0.5)*8;
+    this.drag=o.drag||0;
+  }
+  update(dt){
+    this.life -= dt;
+    this.vy += this.g*dt;
+    if(this.drag){ this.vx *= (1-this.drag*dt); this.vy *= (1-this.drag*dt); }
+    this.x += this.vx*dt; this.y += this.vy*dt; this.rot += this.vr*dt;
+    return this.life>0;
+  }
+  render(ctx){
+    const a = Math.max(0, this.life/this.max);
+    ctx.globalAlpha = a;
+    if(this.type==='ring'){
+      const r = this.size*(1 + (1-a)*2.2);
+      ctx.strokeStyle = this.color; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, Math.PI*2); ctx.stroke();
+    } else if(this.type==='feather'){
+      ctx.save(); ctx.translate(this.x,this.y); ctx.rotate(this.rot);
+      ctx.fillStyle = this.color;
+      ctx.fillRect(-this.size, -1, this.size*2, 2);
+      ctx.restore();
+    } else if(this.type==='spark'){
+      ctx.fillStyle = this.color;
+      ctx.fillRect(this.x-this.size, this.y, this.size*2, 1);
+      ctx.fillRect(this.x, this.y-this.size, 1, this.size*2);
+    } else {
+      ctx.fillStyle = this.color;
+      ctx.fillRect(this.x|0, this.y|0, this.size, this.size);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+class ParticleSystem {
+  constructor(){ this.list = []; }
+  clear(){ this.list.length = 0; }
+  add(o){ this.list.push(new Particle(o)); }
+  update(dt){
+    for(let i=this.list.length-1;i>=0;i--){
+      if(!this.list[i].update(dt)) this.list.splice(i,1);
+    }
+  }
+  render(ctx){ for(const p of this.list) p.render(ctx); }
+
+  dust(x,y,tint){
+    const col = tint || '#C9BFA6';
+    const n = 3 + (Math.random()*3|0);
+    for(let i=0;i<n;i++){
+      const a = (i/n)*Math.PI*2 + Math.random();
+      this.add({x,y, vx:Math.cos(a)*30, vy:Math.sin(a)*18 - 24,
+        g:20, size:2+(Math.random()*2|0), color:col, life:0.25+Math.random()*0.08});
+    }
+  }
+  feathers(x,y){
+    const cols = ['#FFF3D6','#E8D5A8','#E0B876'];
+    for(let i=0;i<9;i++){
+      const a = (i/9)*Math.PI*2 + Math.random()*0.4;
+      const sp = 60+Math.random()*80;
+      this.add({x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - 40,
+        g:220, size:2+(Math.random()*2|0), color:cols[i%3], life:0.5+Math.random()*0.2, type:'feather'});
+    }
+  }
+  splash(x,y,foam,water){
+    for(let i=0;i<11;i++){
+      const a = (i/11)*Math.PI*2;
+      const sp = 50+Math.random()*70;
+      this.add({x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - 60,
+        g:260, size:2, color:(i%2?foam:water), life:0.4+Math.random()*0.2});
+    }
+    this.add({x,y, size:6, color:foam, life:0.5, type:'ring'});
+  }
+  sparkle(x,y){
+    for(let i=0;i<6;i++){
+      const a = (i/6)*Math.PI*2;
+      this.add({x,y, vx:Math.cos(a)*40, vy:Math.sin(a)*40,
+        size:2, color:(i%2?'#FFD23F':'#FFFFFF'), life:0.28+Math.random()*0.07, type:'spark'});
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------
    2. Audio manager — Web Audio synthesized SFX (DESIGN.md / PRD AC-11)
    --------------------------------------------------------------------- */
 class AudioManager {
@@ -252,6 +391,184 @@ class InputManager {
   }
 }
 
+/* ---------------------------------------------------------------------
+   4. Camera — smooth eased upward push + lookahead (DESIGN/PRD §7.2)
+   (basic here; parallax + tuning expanded in later chunks)
+   --------------------------------------------------------------------- */
+class Camera {
+  constructor(){
+    this.y = -LEAD;          // row at the anchor line (float)
+    this.minY = -LEAD;       // monotonically-rising auto-scroll floor
+    this.look = 0;           // lookahead offset (rows)
+    this.scroll = 0.35;      // rows/sec auto push (per stage)
+    this.shakeX = 0; this.shakeY = 0; this._sMag = 0; this._sT = 0;
+  }
+  reset(scroll){
+    this.y = -LEAD; this.minY = -LEAD; this.look = 0;
+    this.scroll = scroll; this.shakeX=0; this.shakeY=0; this._sMag=0; this._sT=0;
+  }
+  shake(mag){ this._sMag = Math.max(this._sMag, mag); this._sT = 0.2; }
+  update(dt, player, active){
+    if(active){
+      this.minY += this.scroll * dt;                 // never stops rising
+      const targetLook = player.lookDir * 0.5;
+      this.look += (targetLook - this.look) * Math.min(1, dt*6);
+      const desired = Math.max(this.minY, player.visualRow() - LEAD) + this.look;
+      this.y += (desired - this.y) * (1 - Math.exp(-dt*7));
+    }
+    // shake decay
+    if(this._sT > 0){
+      this._sT -= dt;
+      const k = Math.max(0, this._sT/0.2);
+      const amp = this._sMag * k;
+      this.shakeX = (Math.random()*2-1)*amp;
+      this.shakeY = (Math.random()*2-1)*amp;
+      if(this._sT<=0){ this.shakeX=0; this.shakeY=0; this._sMag=0; }
+    }
+  }
+  tileTop(row){ return ANCHOR - (row - this.y + 1)*TILE; }
+}
+
+/* ---------------------------------------------------------------------
+   5. Player — grid hop with squash/stretch, wing flap, input buffer,
+   boundary/obstacle blocking, death poses (DESIGN.md §4.1)
+   --------------------------------------------------------------------- */
+class Player {
+  constructor(game){
+    this.game = game;
+    this.row = 0;
+    this.x = colCenterX(3);      // center column
+    this.facing = 1;
+    this.lookDir = 0;            // -1/0/1 for camera lookahead
+    this.hopping = false;
+    this.t = 0;
+    this.fromX = this.x; this.toX = this.x;
+    this.fromRow = 0; this.toRow = 0;
+    this.buffer = null;
+    this.idlePhase = 0;
+    this.ridingLog = null; this.rideOffset = 0;
+    this.dead = false; this.deathKind = null; this.deathT = 0;
+    this.deathX = this.x; this.deathY = 0;
+  }
+  visualRow(){
+    if(this.hopping){
+      const p = this._ease(this.t);
+      return this.fromRow + (this.toRow - this.fromRow)*p;
+    }
+    return this.row;
+  }
+  _ease(t){ return t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2; } // easeInOutQuad
+
+  col(){ return colOf(this.x); }
+
+  tryHop(dir){
+    if(this.dead) return;
+    if(this.hopping){
+      if(this.t > 0.65) this.buffer = dir;   // input buffer (DESIGN §4.1)
+      return;
+    }
+    this._startHop(dir);
+  }
+  _startHop(dir){
+    let targetRow = this.row, targetX = colCenterX(this.col());
+    const c = this.col();
+    if(dir==='up'){ targetRow = this.row+1; this.lookDir = 0; }
+    else if(dir==='down'){ if(this.row<=0){ return; } targetRow = this.row-1; this.lookDir = 0; }
+    else if(dir==='left'){ if(c<=0){ return; } targetX = colCenterX(c-1); this.facing = -1; this.lookDir = -1; }
+    else if(dir==='right'){ if(c>=COLS-1){ return; } targetX = colCenterX(c+1); this.facing = 1; this.lookDir = 1; }
+    else return;
+
+    // obstacle blocking on target grass tile
+    const lane = this.game.laneAt(targetRow);
+    const targetCol = colOf(targetX);
+    if(lane && lane.blocks(targetCol)){
+      this.game.audio.tone(140,0.05,'square',0.12); // soft bump
+      return;
+    }
+    // begin hop
+    this.hopping = true; this.t = 0;
+    this.fromX = this.x; this.toX = targetX;
+    this.fromRow = this.row; this.toRow = targetRow;
+    this.ridingLog = null;
+    this.game.audio.hop();
+    // dust at origin
+    const oy = this.game.camera.tileTop(this.row) + TILE - 4;
+    this.game.particles.dust(this.x, oy, this.game.dustTint());
+  }
+  _land(){
+    this.row = this.toRow; this.x = this.toX;
+    this.hopping = false; this.t = 0; this.lookDir = 0;
+    const dy = this.game.camera.tileTop(this.row) + TILE - 4;
+    this.game.particles.dust(this.x, dy, this.game.dustTint());
+    this.game.onPlayerLanded();
+    if(this.buffer){ const b=this.buffer; this.buffer=null; this._startHop(b); }
+  }
+  update(dt){
+    if(this.dead){ this.deathT += dt; return; }
+    if(this.hopping){
+      this.t += dt/HOP_DUR;
+      if(this.t>=1){ this.t=1; this._land(); }
+      else { const p=this._ease(this.t); this.x = this.fromX + (this.toX-this.fromX)*p; }
+    } else {
+      this.idlePhase += dt;
+      // riding a log carries the chicken
+      if(this.ridingLog){
+        this.x = this.ridingLog.x + this.rideOffset;
+        if(this.x < 6 || this.x > WORLD_W-6){ this.game.killPlayer('river-edge'); }
+      }
+    }
+  }
+  die(kind){
+    if(this.dead) return;
+    this.dead = true; this.deathKind = kind; this.deathT = 0;
+    this.deathX = this.x;
+    this.deathY = this.game.camera.tileTop(this.row) + TILE/2;
+  }
+  render(ctx, cam){
+    if(this.dead && this.deathKind==='water'){
+      // sinking shrink over 150ms then gone
+      const k = Math.max(0, 1 - this.deathT/0.15);
+      if(k<=0) return;
+      this._drawBody(ctx, cam, 1, k, 0, 0, false);
+      return;
+    }
+    if(this.dead && (this.deathKind==='car'||this.deathKind==='train')){
+      if(this.deathT < 0.08){ this._drawBody(ctx, cam, 1.4, 0.4, 0, 0, false); }
+      return; // then hidden; feathers carry the beat
+    }
+    if(this.dead) return; // eagle handled elsewhere
+
+    // alive: idle or hop
+    let sx=1, sy=1, lift=0, wing=false, headDy=0;
+    if(this.hopping){
+      const p = this.t;
+      if(p<0.2){ sy=0.85; sx=1.15; wing=true; }
+      else if(p<0.8){ sy=1.15; sx=0.9; wing=true; }
+      else { sy=0.8; sx=1.2; }
+      lift = Math.sin(Math.PI*this._ease(p)) * HOP_LIFT;
+    } else {
+      const f = Math.floor((this.idlePhase*1000/180)) % 4; // 4 frames @180ms
+      headDy = [0,1,2,1][f];
+      if(this.ridingLog) lift = -1; // slight dip aboard log
+    }
+    this._drawBody(ctx, cam, sx, sy, lift, headDy, wing);
+  }
+  _drawBody(ctx, cam, sx, sy, lift, headDy, wing){
+    const vr = this.visualRow();
+    const feetY = cam.tileTop(vr) + TILE - 4 - lift;
+    const SCALE = 3;
+    // shadow
+    ctx.globalAlpha = 0.22; ctx.fillStyle = '#000';
+    ctx.fillRect(this.x-15, feetY-2, 30, 6); ctx.globalAlpha = 1;
+    ctx.save();
+    ctx.translate(this.x, feetY);
+    ctx.scale(SCALE*sx*this.facing, SCALE*sy);
+    ctx.translate(-8, -16);
+    drawChickenSprite(ctx, headDy, wing);
+    ctx.restore();
+  }
+}
+
 /* =====================================================================
    MAIN GAME  (chunk 1 scaffold — expanded in later chunks)
    ===================================================================== */
@@ -264,6 +581,15 @@ class Game {
     this.time = 0;
     this.scale = 1;
     this.highScore = 0;
+    this.camera = new Camera();
+    this.particles = new ParticleSystem();
+    this.player = null;
+    this.lanes = [];
+    this.stage = 0;
+    this.stageBase = 0;
+    this.furthest = 0;
+    this.corn = 0;
+    this.titleChicken = { idlePhase: 0 };
     this._resize();
     window.addEventListener('resize', ()=>this._resize());
     window.addEventListener('orientationchange', ()=>this._resize());
@@ -309,10 +635,45 @@ class Game {
     }
   }
 
+  /* ---- run lifecycle (lane generation temporary; real gen in chunk 3) ---- */
   startRun(){
-    // full run init added in later chunks; placeholder transitions state
+    this.stage = 0; this.stageBase = 0; this.corn = 0;
+    this._startStage();
     this.state = S.PLAYING;
   }
+  _startStage(){
+    this.furthest = 0;
+    this.camera.reset(0.35);
+    this.particles.clear();
+    this.player = new Player(this);
+    this._genLanes();
+  }
+  _genLanes(){
+    // TEMP: flat grass field (real lane generation arrives in chunk 3)
+    this.lanes = [];
+    for(let r=0;r<=STAGE_ROWS+4;r++){
+      this.lanes.push({ type:'grass', row:r, blocks:()=>false });
+    }
+  }
+  laneAt(row){ return this.lanes[row] || null; }
+  dustTint(){
+    const l = this.player && this.laneAt(this.player.row);
+    return (l && l.type==='road') ? '#8A8A94' : '#C9BFA6';
+  }
+  onPlayerLanded(){
+    const p = this.player;
+    if(p.row > this.furthest){ this.furthest = p.row; }
+    this.score = this.stageBase + this.furthest + this.corn*3;
+    if(p.row >= STAGE_ROWS){ /* stage clear — wired in chunk 6 */ }
+  }
+  killPlayer(cause){
+    if(!this.player || this.player.dead) return;
+    this.player.die(cause==='water'||cause==='river-edge' ? 'water' : cause);
+    // full death flow (shake/slow-mo/particles/state) arrives in chunk 5
+    this.state = S.DYING;
+  }
+  get score(){ return this._score||0; }
+  set score(v){ this._score = v; }
 
   _loop(now){
     let dt = (now - this._last)/1000;
@@ -325,34 +686,93 @@ class Game {
   }
 
   update(dt){
-    // populated in later chunks
+    if(this.state===S.TITLE){
+      this.titleChicken.idlePhase += dt;
+    } else if(this.state===S.PLAYING){
+      this.player.update(dt);
+      this.camera.update(dt, this.player, true);
+      this.particles.update(dt);
+    } else if(this.state===S.DYING){
+      this.player.update(dt);
+      this.camera.update(dt, this.player, false);
+      this.particles.update(dt);
+    }
   }
 
   render(){
     const ctx = this.ctx;
     ctx.setTransform(this._renderScale,0,0,this._renderScale,0,0);
     ctx.imageSmoothingEnabled = false;
-    // clear
     ctx.fillStyle = '#0B0E1A';
     ctx.fillRect(0,0,VW,VH);
 
     if(this.state===S.TITLE){
       this._renderTitlePlaceholder(ctx);
     } else {
-      ctx.fillStyle = '#16213E';
-      ctx.fillRect(0,0,VW,VH);
-      drawText(ctx, 'LOADING...', VW/2, VH/2-4, 2, '#FFFFFF', 'center', 2);
+      this._renderWorld(ctx);
+      this._renderHUD(ctx);
     }
   }
 
+  /* ---- world (temporary grass field; real lanes/parallax in chunk 3) ---- */
+  _renderWorld(ctx){
+    const cam = this.camera;
+    ctx.save();
+    ctx.translate(cam.shakeX, cam.shakeY);
+    // sky backdrop
+    const g = ctx.createLinearGradient(0,0,0,VH);
+    g.addColorStop(0,'#8FD3F4'); g.addColorStop(1,'#C9F2C0');
+    ctx.fillStyle = g; ctx.fillRect(0,-40,VW,VH+80);
+    // lanes
+    const r0 = Math.floor(cam.y) - 2;
+    const r1 = Math.ceil(cam.y) + Math.ceil(VH/TILE) + 2;
+    for(let r=r1;r>=r0;r--){
+      const top = cam.tileTop(r);
+      if(top>VH || top+TILE<0) continue;
+      ctx.fillStyle = (r%2===0) ? '#6ABE30' : '#4F9A28';
+      ctx.fillRect(0, top, VW, TILE);
+      ctx.fillStyle = '#3E7A1F';
+      for(let i=0;i<5;i++){
+        const bx = ((r*53+i*97)%VW);
+        ctx.fillRect(bx, top+8+((i*11)%30), 2, 3);
+      }
+    }
+    if(this.player) this.player.render(ctx, cam);
+    this.particles.render(ctx);
+    ctx.restore();
+  }
+
+  _renderHUD(ctx){
+    ctx.fillStyle = 'rgba(15,23,42,0.82)';
+    ctx.fillRect(0,0,VW,HUD_H);
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.fillRect(0,HUD_H-1,VW,1);
+    drawText(ctx,'SCORE',12,8,1,'#94A3B8','left',1);
+    drawText(ctx,String(this.score),12,20,2,'#FFFFFF','left',1);
+    drawText(ctx,'STAGE '+(this.stage+1)+'/3',VW/2,16,1,'#FFFFFF','center',1);
+    drawText(ctx,String(this.corn),VW-52,20,2,'#FFD23F','right',1);
+    drawText(ctx, this.audio.muted?'X':'O', VW-22, 14, 2, '#2563EB','center',1);
+  }
+
   _renderTitlePlaceholder(ctx){
-    // temporary title until chunk 7 replaces it
     const g = ctx.createLinearGradient(0,0,0,VH);
     g.addColorStop(0,'#8FD3F4'); g.addColorStop(1,'#C9F2C0');
     ctx.fillStyle = g; ctx.fillRect(0,0,VW,VH);
     drawText(ctx, 'CHICKEN ROAD', VW/2, 90, 3, '#FFFFFF', 'center', 2);
+    // idle-animated hero chicken (4x)
+    const f = Math.floor((this.titleChicken.idlePhase*1000/180)) % 4;
+    const headDy = [0,1,2,1][f];
+    ctx.save();
+    ctx.translate(VW/2, 300);
+    ctx.scale(4,4); ctx.translate(-8,-16);
+    drawChickenSprite(ctx, headDy, false);
+    ctx.restore();
     const blink = (Math.floor(this.time*2)%2)===0;
-    if(blink) drawText(ctx, 'PRESS SPACE TO START', VW/2, 360, 1, '#FFFFFF', 'center', 2);
+    if(blink){
+      drawText(ctx, 'PRESS SPACE TO START', VW/2, 380, 1, '#FFFFFF', 'center', 2);
+      drawText(ctx, 'TAP TO START', VW/2, 400, 1, '#FFFFFF', 'center', 2);
+    }
+    if(this.highScore>0) drawText(ctx,'BEST: '+this.highScore, VW/2, 424, 1, '#FFD23F','center',2);
   }
 }
 
