@@ -392,6 +392,196 @@ class InputManager {
 }
 
 /* ---------------------------------------------------------------------
+   3b. Stage configuration — palettes (DESIGN.md §3) + difficulty (PRD §7.5)
+   --------------------------------------------------------------------- */
+const STAGES = [
+  { // Stage 1 — Countryside (Day)
+    name:'COUNTRYSIDE',
+    scroll:0.34, vMin:42, vMax:74, vehPerLane:[1,2],
+    logMin:26, logMax:44, warn:1.4, trainSpeed:820,
+    weights:{ grass:0.50, road:0.36, river:0.11, rail:0.03 },
+    col:{
+      skyTop:'#8FD3F4', skyBottom:'#C9F2C0', sun:'#FFE066',
+      hillFar:'#A6DE7A', hillNear:'#7FC24C',
+      safe:'#6ABE30', safeAlt:'#4F9A28', safeEdge:'#3E7A1F',
+      road:'#4A4A55', roadAlt:'#43434C', marking:'#F4E285',
+      river:'#3AA6D9', riverDark:'#2C86B0', foam:'#BEEFFF',
+      treeCanopy:'#2E7D32', treeHi:'#3E9E42', treeTrunk:'#6B4226',
+      rock:'#9C9C9C', rockShadow:'#6E6E6E',
+      cars:['#E4572E','#3C91E6','#FFC93C'], carWin:'#BFE3FF', headlight:'#FFF4B8',
+      railBed:'#5B4A34', railMetal:'#C7C2B8', railRust:'#8B5E3C',
+      signal:'#FFB100', signalOff:'#4a3a10', logBody:'#A9743F', logDark:'#8A5C2E', logHi:'#C08F52',
+      obstacle:'#9C9C9C'
+    }
+  },
+  { // Stage 2 — City (Night)
+    name:'CITY',
+    scroll:0.52, vMin:74, vMax:124, vehPerLane:[2,3],
+    logMin:46, logMax:70, warn:1.15, trainSpeed:940,
+    weights:{ grass:0.34, road:0.46, river:0.12, rail:0.08 },
+    col:{
+      skyTop:'#1A1A2E', skyBottom:'#16213E', sun:null,
+      skyline:'#0F1024', star:'#E8E8F0', building:'#23233A', windowLit:'#FFCB57',
+      safe:'#2F6B3D', safeAlt:'#24532F', safeEdge:'#1C3F24',
+      road:'#2B2B36', roadAlt:'#26262F', marking:'#FFD866',
+      river:'#1D4E63', riverDark:'#17394A', foam:'#7FD8E8',
+      treeCanopy:'#234a2b', treeHi:'#2f6b3d', treeTrunk:'#3a2a1a',
+      rock:'#545461', rockShadow:'#3a3a44',
+      cars:['#464655','#F4C430','#3C6FE6'], carWin:'#FFF6D0', headlight:'#FFF6D0', taillight:'#FF3B3B',
+      railBed:'#2b2b36', railMetal:'#C7C2B8', railRust:'#5a4632',
+      signal:'#FFB100', signalOff:'#3a2c08', logBody:'#5a4632', logDark:'#3f3020', logHi:'#7a5c3a',
+      streetGlow:'#FFD866', obstacle:'#545461'
+    }
+  },
+  { // Stage 3 — Industrial (Hazard-lit)
+    name:'INDUSTRIAL',
+    scroll:0.78, vMin:112, vMax:172, vehPerLane:[2,4],
+    logMin:0, logMax:0, warn:0.9, trainSpeed:1080,
+    weights:{ grass:0.34, road:0.40, river:0.0, rail:0.26 },
+    col:{
+      skyTop:'#2A211C', skyBottom:'#1B1613', smokestack:'#171310', ember:'#FF7A29',
+      safe:'#6B6153', safeAlt:'#5A5245', safeEdge:'#463F34',
+      road:'#3A342E', roadAlt:'#332E29', marking:'#FFB100', hazardA:'#FFB100', hazardB:'#1A1A1A',
+      river:'#1D4E63', riverDark:'#17394A', foam:'#7FD8E8',
+      treeCanopy:'#3a3733', treeHi:'#55524d', treeTrunk:'#2a2622',
+      rock:'#C0392B', rockShadow:'#7A2418',
+      cars:['#55524D','#3A3733','#6b5a3b'], carWin:'#FFD24D', headlight:'#FFD24D',
+      railBed:'#4A423A', railMetal:'#C7C2B8', railRust:'#8B5E3C',
+      signal:'#FF2E2E', signalOff:'#3a140f', logBody:'#4A423A', logDark:'#332e29', logHi:'#6b5a3b',
+      obstacle:'#C0392B'
+    }
+  }
+];
+
+/* ---------------------------------------------------------------------
+   3c. Lane — base grid row.  Holds its type + content (obstacles,
+   vehicles, logs, train, corn).  (DESIGN.md §4.7 / PRD §7.3)
+   Vehicles/Log/Train classes are populated in chunk 4.
+   --------------------------------------------------------------------- */
+class Lane {
+  constructor(game, row, type){
+    this.game = game; this.row = row; this.type = type;
+    this.col = game.stageCfg().col;
+    this.obstacles = [];   // {col,type:'tree'|'rock'}
+    this.vehicles = [];    // Vehicle[]
+    this.logs = [];        // Log[]
+    this.train = null;     // Train
+    this.corn = null;      // {col, phase, collected}
+    this.shimmer = Math.random()*10;
+  }
+  blocks(col){
+    for(const o of this.obstacles) if(o.col===col) return true;
+    return false;
+  }
+  update(dt){
+    for(const v of this.vehicles) v.update(dt);
+    for(const l of this.logs) l.update(dt);
+    if(this.train) this.train.update(dt);
+    if(this.corn && !this.corn.collected) this.corn.phase += dt;
+    if(this.type==='river') this.shimmer += dt;
+  }
+  /* renderBase draws the ground; renderProps draws entities above player-lane */
+  renderBase(ctx, top){
+    const c = this.col, alt = (this.row%2===0);
+    if(this.type==='grass'){
+      ctx.fillStyle = alt ? c.safe : c.safeAlt; ctx.fillRect(0,top,VW,TILE);
+      ctx.fillStyle = c.safeEdge;
+      for(let i=0;i<6;i++){ const bx=((this.row*53+i*61)%VW); ctx.fillRect(bx, top+10+((i*13)%28),2,3); }
+    } else if(this.type==='road'){
+      ctx.fillStyle = alt ? c.road : c.roadAlt; ctx.fillRect(0,top,VW,TILE);
+      if(this.game.stage===2){ // industrial hazard tape edges
+        for(let x=0;x<VW;x+=16){ ctx.fillStyle=c.hazardA; ctx.fillRect(x,top+TILE/2-2,8,4); ctx.fillStyle=c.hazardB; ctx.fillRect(x+8,top+TILE/2-2,8,4); }
+      } else {
+        ctx.fillStyle = c.marking;
+        for(let x=4;x<VW;x+=16) ctx.fillRect(x, top+TILE/2-2, 8, 4);
+      }
+    } else if(this.type==='river'){
+      ctx.fillStyle = c.river; ctx.fillRect(0,top,VW,TILE);
+      ctx.fillStyle = c.riverDark; ctx.fillRect(0,top,VW,4); ctx.fillRect(0,top+TILE-4,VW,4);
+      ctx.fillStyle = c.foam; ctx.globalAlpha=0.5;
+      const off = (this.shimmer*18)%40;
+      for(let x=-40;x<VW;x+=40){ ctx.fillRect(x+off, top+14, 12,2); ctx.fillRect(x+off+20, top+30, 12,2); }
+      ctx.globalAlpha=1;
+    } else if(this.type==='rail'){
+      ctx.fillStyle = c.railBed; ctx.fillRect(0,top,VW,TILE);
+      ctx.fillStyle = c.railRust;
+      for(let x=2;x<VW;x+=12) ctx.fillRect(x, top+10, 4, TILE-20);
+      ctx.fillStyle = c.railMetal;
+      ctx.fillRect(0, top+14, VW, 3); ctx.fillRect(0, top+TILE-16, VW, 3);
+    }
+    // obstacles + corn drawn as props but corn/tree need to sit above ground
+    for(const o of this.obstacles) this._drawObstacle(ctx, top, o);
+    if(this.corn && !this.corn.collected) this._drawCorn(ctx, top);
+  }
+  _drawObstacle(ctx, top, o){
+    const c=this.col; const x=colCenterX(o.col);
+    if(o.type==='tree'){
+      ctx.fillStyle=c.treeTrunk; ctx.fillRect(x-4, top+TILE-18, 8, 18);
+      ctx.fillStyle=c.treeCanopy; ctx.fillRect(x-16, top-14, 32, 30);
+      ctx.fillStyle=c.treeHi; ctx.fillRect(x-12, top-10, 12, 12);
+    } else {
+      ctx.fillStyle=c.rockShadow; ctx.fillRect(x-14, top+TILE-16, 28, 14);
+      ctx.fillStyle=c.rock; ctx.fillRect(x-12, top+TILE-20, 22, 14);
+      ctx.fillStyle=c.rock; ctx.fillRect(x-6, top+TILE-24, 12, 8);
+    }
+  }
+  _drawCorn(ctx, top){
+    const x=colCenterX(this.corn.col), y=top+TILE/2;
+    const cycle=(this.corn.phase*1000%480)/480;
+    let sq=Math.abs(Math.cos(cycle*Math.PI*2)); sq=Math.max(0.14,sq);
+    ctx.save(); ctx.translate(x,y); ctx.scale(sq,1); ctx.translate(-6,-6);
+    ctx.fillStyle='#7ABF4C'; ctx.fillRect(3,7,6,4);
+    ctx.fillStyle='#FFD23F';
+    ctx.fillRect(3,2,2,2); ctx.fillRect(6,2,2,2); ctx.fillRect(4,4,2,2); ctx.fillRect(7,4,2,2); ctx.fillRect(3,6,6,1);
+    ctx.restore();
+  }
+}
+
+/* ---------------------------------------------------------------------
+   3d. Eagle — fall-behind fail state (DESIGN.md §4.6)
+   --------------------------------------------------------------------- */
+class Eagle {
+  constructor(game){
+    this.game=game; this.t=0; this.dur=0.85; this.done=false;
+    const p=game.player;
+    this.targetX=p.x; this.targetY=game.camera.tileTop(p.row)+TILE/2;
+    this.startX=p.x+70; this.startY=-40;
+    this.x=this.startX; this.y=this.startY; this.grabbed=false;
+  }
+  update(dt){
+    this.t+=dt; const k=Math.min(1,this.t/this.dur);
+    if(k<0.55){
+      const a=k/0.55; this.x=this.startX+(this.targetX-this.startX)*a; this.y=this.startY+(this.targetY-this.startY)*a; this.scale=0.4+a*0.6;
+    } else if(k<0.7){ this.grabbed=true; this.x=this.targetX; this.y=this.targetY; this.scale=1;
+    } else { const a=(k-0.7)/0.3; this.x=this.targetX; this.y=this.targetY-a*260; this.scale=1;
+      if(this.game.player) this.game.player.deathY=this.y; }
+    if(k>=1) this.done=true;
+  }
+  render(ctx){
+    // vignette darken
+    const k=Math.min(1,this.t/this.dur);
+    ctx.fillStyle='rgba(0,0,0,'+(0.4*Math.min(1,k*1.5))+')';
+    ctx.fillRect(0,0,VW,VH);
+    const s=(this.scale||0.4)*3;
+    ctx.save(); ctx.translate(this.x,this.y); ctx.scale(s,s); ctx.translate(-12,-12);
+    // eagle 24x24-ish
+    ctx.fillStyle='#1B1611'; ctx.fillRect(2,10,20,3);
+    ctx.fillStyle='#4A3B32'; ctx.fillRect(3,11,18,2); ctx.fillRect(9,7,6,9);
+    if(!this.grabbed){ ctx.fillStyle='#4A3B32'; ctx.fillRect(4,9,4,3); ctx.fillRect(16,9,4,3); }
+    ctx.fillStyle='#E8DCC8'; ctx.fillRect(10,7,4,3);
+    ctx.fillStyle='#FFB020'; ctx.fillRect(13,8,2,1);
+    ctx.fillStyle='#1B1611'; ctx.fillRect(11,8,1,1);
+    ctx.fillStyle='#FFB020'; ctx.fillRect(9,16,2,3); ctx.fillRect(13,16,2,3);
+    ctx.restore();
+    // grabbed chicken held in talons
+    if(this.grabbed || (this.scale>=1)){
+      ctx.save(); ctx.translate(this.x, this.y+18); ctx.scale(1.4,1.4); ctx.translate(-8,-16);
+      drawChickenSprite(ctx,0,false); ctx.restore();
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------
    4. Camera — smooth eased upward push + lookahead (DESIGN/PRD §7.2)
    (basic here; parallax + tuning expanded in later chunks)
    --------------------------------------------------------------------- */
@@ -641,24 +831,66 @@ class Game {
     this._startStage();
     this.state = S.PLAYING;
   }
+  stageCfg(){ return STAGES[this.stage]; }
   _startStage(){
     this.furthest = 0;
-    this.camera.reset(0.35);
+    this.eagle = null;
+    const cfg = this.stageCfg();
+    this.camera.reset(cfg.scroll);
     this.particles.clear();
     this.player = new Player(this);
     this._genLanes();
   }
   _genLanes(){
-    // TEMP: flat grass field (real lane generation arrives in chunk 3)
+    const cfg = this.stageCfg();
+    const w = cfg.weights;
     this.lanes = [];
+    let lastType='grass', streak=0;
     for(let r=0;r<=STAGE_ROWS+4;r++){
-      this.lanes.push({ type:'grass', row:r, blocks:()=>false });
+      let type;
+      if(r<3 || r>=STAGE_ROWS) type='grass';          // safe start + clear pad
+      else {
+        type = this._pickType(w);
+        if(type===lastType){ streak++; if(streak>=2 && type!=='grass'){ type='grass'; } }
+      }
+      if(type===lastType) streak++; else { streak=0; lastType=type; }
+      const lane = new Lane(this, r, type);
+      if(type==='grass' && r>=3 && r<STAGE_ROWS){
+        this._addObstacles(lane);
+      }
+      this._maybeCorn(lane);
+      this._populateHazards(lane, cfg);   // vehicles/logs/train (chunk 4)
+      this.lanes.push(lane);
     }
   }
+  _pickType(w){
+    const roll=Math.random(); let acc=0;
+    for(const k of ['grass','road','river','rail']){ acc+=w[k]||0; if(roll<acc) return k; }
+    return 'grass';
+  }
+  _addObstacles(lane){
+    const n = Math.random()<0.5 ? (Math.random()<0.5?1:2) : 0;
+    const used = new Set();
+    for(let i=0;i<n;i++){
+      const col = Math.random()*COLS|0;
+      if(used.has(col)) continue; used.add(col);
+      lane.obstacles.push({ col, type: Math.random()<0.5?'tree':'rock' });
+    }
+  }
+  _maybeCorn(lane){
+    if(lane.type==='river') return;              // corn needs solid footing
+    if(Math.random()>0.22) return;
+    let col; let tries=0;
+    do { col=Math.random()*COLS|0; tries++; } while(lane.blocks(col) && tries<8);
+    if(!lane.blocks(col)) lane.corn = { col, phase:Math.random(), collected:false };
+  }
+  _populateHazards(lane, cfg){ /* Vehicle/Log/Train population added in chunk 4 */ }
   laneAt(row){ return this.lanes[row] || null; }
   dustTint(){
     const l = this.player && this.laneAt(this.player.row);
-    return (l && l.type==='road') ? '#8A8A94' : '#C9BFA6';
+    if(!l) return '#C9BFA6';
+    if(l.type==='road'||l.type==='rail') return '#8A8A94';
+    return '#C9BFA6';
   }
   onPlayerLanded(){
     const p = this.player;
@@ -669,8 +901,17 @@ class Game {
   killPlayer(cause){
     if(!this.player || this.player.dead) return;
     this.player.die(cause==='water'||cause==='river-edge' ? 'water' : cause);
-    // full death flow (shake/slow-mo/particles/state) arrives in chunk 5
+    this._deathCause = cause;
+    // full death flow (shake/slow-mo/particles) refined in chunk 5
     this.state = S.DYING;
+    this._dyingT = 0;
+    this.audio.death();
+  }
+  gameOver(cause){
+    this._deathCause = cause || this._deathCause;
+    if(this.score > this.highScore){ this.highScore = this.score; this.newBest = true; }
+    else this.newBest = false;
+    this.state = S.GAME_OVER;
   }
   get score(){ return this._score||0; }
   set score(v){ this._score = v; }
@@ -688,14 +929,36 @@ class Game {
   update(dt){
     if(this.state===S.TITLE){
       this.titleChicken.idlePhase += dt;
-    } else if(this.state===S.PLAYING){
+      return;
+    }
+    if(this.state===S.PLAYING){
       this.player.update(dt);
+      for(const lane of this.lanes) lane.update(dt);
       this.camera.update(dt, this.player, true);
       this.particles.update(dt);
+      this._checkFallBehind();
     } else if(this.state===S.DYING){
+      this._dyingT = (this._dyingT||0) + dt;
       this.player.update(dt);
+      for(const lane of this.lanes) lane.update(dt);
       this.camera.update(dt, this.player, false);
       this.particles.update(dt);
+      if(this._dyingT>0.65) this.gameOver();
+    } else if(this.state===S.EAGLE){
+      for(const lane of this.lanes) lane.update(dt);
+      this.particles.update(dt);
+      this.eagle.update(dt);
+      if(this.eagle.done) this.gameOver('eagle');
+    }
+  }
+  _checkFallBehind(){
+    if(!this.player || this.player.dead) return;
+    const top = this.camera.tileTop(this.player.row);
+    if(top > VH){                 // chicken dropped below the visible window
+      this.state = S.EAGLE;
+      this.player.dead = true; this.player.deathKind = 'eagle';
+      this.eagle = new Eagle(this);
+      this.audio.death();
     }
   }
 
@@ -710,36 +973,72 @@ class Game {
       this._renderTitlePlaceholder(ctx);
     } else {
       this._renderWorld(ctx);
+      if(this.state===S.EAGLE && this.eagle) this.eagle.render(ctx);
       this._renderHUD(ctx);
+      if(this.state===S.GAME_OVER) this._renderGameOver(ctx);
     }
   }
 
-  /* ---- world (temporary grass field; real lanes/parallax in chunk 3) ---- */
+  /* ---- world: parallax sky + lanes + entities + player + particles ---- */
   _renderWorld(ctx){
-    const cam = this.camera;
+    const cam = this.camera; const cfg = this.stageCfg(); const c = cfg.col;
     ctx.save();
     ctx.translate(cam.shakeX, cam.shakeY);
-    // sky backdrop
-    const g = ctx.createLinearGradient(0,0,0,VH);
-    g.addColorStop(0,'#8FD3F4'); g.addColorStop(1,'#C9F2C0');
-    ctx.fillStyle = g; ctx.fillRect(0,-40,VW,VH+80);
-    // lanes
+    this._renderParallax(ctx, cfg);
     const r0 = Math.floor(cam.y) - 2;
-    const r1 = Math.ceil(cam.y) + Math.ceil(VH/TILE) + 2;
+    const r1 = Math.ceil(cam.y) + Math.ceil(VH/TILE) + 3;
+    // ground bases far→near (higher rows first so canopies overlap correctly)
     for(let r=r1;r>=r0;r--){
+      const lane = this.laneAt(r); if(!lane) continue;
       const top = cam.tileTop(r);
-      if(top>VH || top+TILE<0) continue;
-      ctx.fillStyle = (r%2===0) ? '#6ABE30' : '#4F9A28';
-      ctx.fillRect(0, top, VW, TILE);
-      ctx.fillStyle = '#3E7A1F';
-      for(let i=0;i<5;i++){
-        const bx = ((r*53+i*97)%VW);
-        ctx.fillRect(bx, top+8+((i*11)%30), 2, 3);
-      }
+      if(top>VH+40 || top+TILE<-40) continue;
+      lane.renderBase(ctx, top);
+      // depth seam
+      ctx.fillStyle='rgba(0,0,0,0.12)'; ctx.fillRect(0, top+TILE-2, VW, 2);
+    }
+    // entities (vehicles/logs/trains) drawn in chunk 4 via lane.renderProps
+    for(let r=r1;r>=r0;r--){
+      const lane=this.laneAt(r); if(!lane || !lane.renderProps) continue;
+      const top=cam.tileTop(r);
+      if(top>VH+40 || top+TILE<-40) continue;
+      lane.renderProps(ctx, top);
     }
     if(this.player) this.player.render(ctx, cam);
     this.particles.render(ctx);
     ctx.restore();
+  }
+
+  _renderParallax(ctx, cfg){
+    const c=cfg.col, cam=this.camera;
+    const g = ctx.createLinearGradient(0,0,0,VH);
+    g.addColorStop(0,c.skyTop); g.addColorStop(1,c.skyBottom);
+    ctx.fillStyle=g; ctx.fillRect(0,0,VW,VH);
+    const far = -(cam.y*TILE*0.12)%160;
+    const near = -(cam.y*TILE*0.28)%120;
+    if(this.stage===0){
+      ctx.fillStyle=c.sun; ctx.beginPath(); ctx.arc(266,64,20,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle=c.hillFar;
+      for(let i=-1;i<4;i++){ const x=i*140+far; ctx.beginPath(); ctx.arc(x+70,150,80,Math.PI,0); ctx.fill(); }
+      ctx.fillStyle=c.hillNear;
+      for(let i=-1;i<4;i++){ const x=i*120+near; ctx.beginPath(); ctx.arc(x+60,180,70,Math.PI,0); ctx.fill(); }
+    } else if(this.stage===1){
+      ctx.fillStyle=c.star;
+      for(let i=0;i<28;i++){ ctx.fillRect((i*47)%VW,(i*29)%150,1,1); }
+      ctx.fillStyle=c.skyline;
+      for(let i=-1;i<6;i++){ const x=i*70+far; ctx.fillRect(x,110,50,90); }
+      ctx.fillStyle=c.building;
+      for(let i=-1;i<7;i++){ const x=i*56+near; ctx.fillRect(x,150,44,90);
+        ctx.fillStyle=c.windowLit;
+        for(let wy=158; wy<236; wy+=14) for(let wx=x+6; wx<x+40; wx+=12){ if((wx*wy)%7<3) ctx.fillRect(wx,wy,5,6); }
+        ctx.fillStyle=c.building;
+      }
+    } else {
+      ctx.fillStyle=c.smokestack;
+      for(let i=-1;i<4;i++){ const x=i*130+far; ctx.fillRect(x+30,70,18,130); ctx.fillRect(x+90,50,22,150); }
+      ctx.fillStyle=c.ember; ctx.globalAlpha=0.6;
+      for(let i=0;i<10;i++){ const ey=(200-(this.time*30+i*40)%200); ctx.fillRect((i*57)%VW, ey, 2,2); }
+      ctx.globalAlpha=1;
+    }
   }
 
   _renderHUD(ctx){
@@ -752,6 +1051,16 @@ class Game {
     drawText(ctx,'STAGE '+(this.stage+1)+'/3',VW/2,16,1,'#FFFFFF','center',1);
     drawText(ctx,String(this.corn),VW-52,20,2,'#FFD23F','right',1);
     drawText(ctx, this.audio.muted?'X':'O', VW-22, 14, 2, '#2563EB','center',1);
+  }
+
+  _renderGameOver(ctx){
+    ctx.fillStyle='rgba(60,10,10,0.6)'; ctx.fillRect(0,0,VW,VH);
+    drawText(ctx,'GAME OVER',VW/2,180,3,'#DC2626','center',2);
+    drawText(ctx,'SCORE '+this.score,VW/2,250,2,'#FFFFFF','center',2);
+    drawText(ctx,'CORN '+this.corn,VW/2,275,2,'#FFFFFF','center',2);
+    drawText(ctx,'BEST '+this.highScore,VW/2,300,2,'#FFD23F','center',2);
+    if((Math.floor(this.time*2)%2)===0)
+      drawText(ctx,'PRESS SPACE / TAP TO RESTART',VW/2,360,1,'#FFFFFF','center',2);
   }
 
   _renderTitlePlaceholder(ctx){
@@ -781,7 +1090,19 @@ class Game {
    --------------------------------------------------------------------- */
 window.addEventListener('load', ()=>{
   const canvas = document.getElementById('game');
-  window.__game = new Game(canvas);
+  const game = new Game(canvas);
+  window.__game = game;
+  // dev aid (also handy for QA): file://.../index.html?autostart=1&stage=2
+  const q = new URLSearchParams(location.search);
+  if(q.get('autostart')){
+    game.stage = Math.max(0, Math.min(2, parseInt(q.get('stage')||'0',10)));
+    game.stageBase = game.stage*STAGE_ROWS;
+    game._startStage();
+    game.state = S.PLAYING;
+    const hops = parseInt(q.get('hops')||'0',10);
+    for(let i=0;i<hops;i++){ if(game.player) { game.player.row++; game.player.x = colCenterX(3); } }
+    if(game.player){ game.furthest = game.player.row; game.camera.y = game.player.row - LEAD; game.camera.minY = game.camera.y; }
+  }
 });
 </script>
 </body>
