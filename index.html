@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Chicken Road</title>
+<style>
+  html,body{
+    margin:0; padding:0; height:100%; width:100%;
+    background:#0B0E1A; overflow:hidden;
+    touch-action:none; -webkit-user-select:none; user-select:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  #wrap{
+    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    background:#0B0E1A;
+  }
+  #game{
+    image-rendering:pixelated; image-rendering:crisp-edges;
+    display:block; background:#000;
+    touch-action:none;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+</div>
+<script>
+"use strict";
+/* =====================================================================
+   CHICKEN ROAD — single-file HTML5 Canvas arcade game.
+   No external assets, no libraries, no network. All art drawn
+   programmatically; all SFX synthesized via Web Audio API.
+   ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   0. Core constants (virtual/logical resolution — DESIGN.md §1.1)
+   --------------------------------------------------------------------- */
+const TILE   = 48;               // logical px per tile (16px art * 3x)
+const COLS   = 7;                // play column width in tiles
+const VW     = COLS * TILE;      // 336 virtual width
+const VH     = 576;              // virtual height (12 tiles)
+const HUD_H  = 48;               // top HUD strip
+const WORLD_W = COLS * TILE;     // horizontal world span for entities
+const ANCHOR = 415;             // screen-y where camera.y row line sits
+const LEAD   = 2;                // rows player stays ahead of anchor
+const HOP_DUR = 0.15;           // seconds per hop
+const HOP_LIFT = 14;            // px arc apex
+const STAGE_ROWS = 30;          // rows per stage before clear
+
+/* Game states */
+const S = { TITLE:'title', PLAYING:'playing', DYING:'dying', EAGLE:'eagle',
+            STAGE_CLEAR:'stageclear', GAME_OVER:'gameover', VICTORY:'victory' };
+
+/* ---------------------------------------------------------------------
+   1. Bitmap font — hand-drawn 5x7 glyph table (DESIGN.md §1.6 approach 2).
+   Guarantees a crisp blocky arcade look with zero external fonts.
+   --------------------------------------------------------------------- */
+const FONT = (function(){
+  const G = {};
+  const def = (c, rows) => { G[c] = rows; };
+  def(' ', ["00000","00000","00000","00000","00000","00000","00000"]);
+  def('0', ["01110","10001","10011","10101","11001","10001","01110"]);
+  def('1', ["00100","01100","00100","00100","00100","00100","01110"]);
+  def('2', ["01110","10001","00001","00010","00100","01000","11111"]);
+  def('3', ["11111","00010","00100","00010","00001","10001","01110"]);
+  def('4', ["00010","00110","01010","10010","11111","00010","00010"]);
+  def('5', ["11111","10000","11110","00001","00001","10001","01110"]);
+  def('6', ["00110","01000","10000","11110","10001","10001","01110"]);
+  def('7', ["11111","00001","00010","00100","01000","01000","01000"]);
+  def('8', ["01110","10001","10001","01110","10001","10001","01110"]);
+  def('9', ["01110","10001","10001","01111","00001","00010","01100"]);
+  def('A', ["01110","10001","10001","11111","10001","10001","10001"]);
+  def('B', ["11110","10001","10001","11110","10001","10001","11110"]);
+  def('C', ["01110","10001","10000","10000","10000","10001","01110"]);
+  def('D', ["11100","10010","10001","10001","10001","10010","11100"]);
+  def('E', ["11111","10000","10000","11110","10000","10000","11111"]);
+  def('F', ["11111","10000","10000","11110","10000","10000","10000"]);
+  def('G', ["01110","10001","10000","10111","10001","10001","01110"]);
+  def('H', ["10001","10001","10001","11111","10001","10001","10001"]);
+  def('I', ["01110","00100","00100","00100","00100","00100","01110"]);
+  def('J', ["00111","00010","00010","00010","10010","10010","01100"]);
+  def('K', ["10001","10010","10100","11000","10100","10010","10001"]);
+  def('L', ["10000","10000","10000","10000","10000","10000","11111"]);
+  def('M', ["10001","11011","10101","10101","10001","10001","10001"]);
+  def('N', ["10001","11001","10101","10011","10001","10001","10001"]);
+  def('O', ["01110","10001","10001","10001","10001","10001","01110"]);
+  def('P', ["11110","10001","10001","11110","10000","10000","10000"]);
+  def('Q', ["01110","10001","10001","10001","10101","10010","01101"]);
+  def('R', ["11110","10001","10001","11110","10100","10010","10001"]);
+  def('S', ["01110","10001","10000","01110","00001","10001","01110"]);
+  def('T', ["11111","00100","00100","00100","00100","00100","00100"]);
+  def('U', ["10001","10001","10001","10001","10001","10001","01110"]);
+  def('V', ["10001","10001","10001","10001","10001","01010","00100"]);
+  def('W', ["10001","10001","10001","10101","10101","11011","10001"]);
+  def('X', ["10001","10001","01010","00100","01010","10001","10001"]);
+  def('Y', ["10001","10001","01010","00100","00100","00100","00100"]);
+  def('Z', ["11111","00001","00010","00100","01000","10000","11111"]);
+  def(':', ["00000","00100","00000","00000","00100","00000","00000"]);
+  def('!', ["00100","00100","00100","00100","00100","00000","00100"]);
+  def("'", ["00100","00100","00000","00000","00000","00000","00000"]);
+  def('/', ["00001","00010","00100","00100","00100","01000","10000"]);
+  def('.', ["00000","00000","00000","00000","00000","00000","00100"]);
+  def(',', ["00000","00000","00000","00000","00000","00100","01000"]);
+  def('-', ["00000","00000","00000","11111","00000","00000","00000"]);
+  def('?', ["01110","10001","00001","00110","00100","00000","00100"]);
+  def('%', ["11001","11010","00100","01011","10011","00000","00000"]);
+  return G;
+})();
+
+/* draw bitmap text.  align: 'left'|'center'|'right'. outline: 0 none,1 shadow,2 full */
+function textWidth(str, sc){ return str.length * 6 * sc - sc; }
+function drawText(ctx, str, x, y, sc, color, align, outline){
+  str = String(str).toUpperCase();
+  align = align || 'left';
+  outline = (outline===undefined) ? 2 : outline;
+  const w = textWidth(str, sc);
+  let ox = x;
+  if(align==='center') ox = Math.round(x - w/2);
+  else if(align==='right') ox = Math.round(x - w);
+  const drawAt = (dx, dy, col) => {
+    ctx.fillStyle = col;
+    let cx = ox + dx;
+    for(let i=0;i<str.length;i++){
+      const g = FONT[str[i]] || FONT['?'];
+      for(let r=0;r<7;r++){
+        const row = g[r];
+        for(let c=0;c<5;c++){
+          if(row[c]==='1') ctx.fillRect(cx + c*sc, (y+dy) + r*sc, sc, sc);
+        }
+      }
+      cx += 6*sc;
+    }
+  };
+  if(outline===2){
+    const o = 'rgba(0,0,0,0.75)';
+    for(let dx=-sc; dx<=sc; dx+=sc) for(let dy=-sc; dy<=sc; dy+=sc){
+      if(dx||dy) drawAt(dx,dy,o);
+    }
+  } else if(outline===1){
+    drawAt(sc, sc, 'rgba(0,0,0,0.7)');
+  }
+  drawAt(0,0,color);
+}
+
+/* ---------------------------------------------------------------------
+   2. Audio manager — Web Audio synthesized SFX (DESIGN.md / PRD AC-11)
+   --------------------------------------------------------------------- */
+class AudioManager {
+  constructor(){
+    this.ctx = null;
+    this.muted = false;
+    this.unlocked = false;
+    this.master = null;
+  }
+  ensure(){
+    if(this.ctx) return;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new AC();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.5;
+      this.master.connect(this.ctx.destination);
+    } catch(e){ this.ctx = null; }
+  }
+  unlock(){
+    this.ensure();
+    if(this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+    this.unlocked = true;
+  }
+  toggleMute(){ this.muted = !this.muted; return this.muted; }
+  /* generic tone with optional frequency sweep */
+  tone(freq, dur, type, gain, sweepTo, delay){
+    if(!this.ctx || this.muted) return;
+    const t0 = this.ctx.currentTime + (delay||0);
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = type || 'square';
+    osc.frequency.setValueAtTime(freq, t0);
+    if(sweepTo) osc.frequency.exponentialRampToValueAtTime(Math.max(1,sweepTo), t0+dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(gain||0.3, t0+0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+    osc.connect(g); g.connect(this.master);
+    osc.start(t0); osc.stop(t0+dur+0.02);
+  }
+  noise(dur, gain, filterFreq){
+    if(!this.ctx || this.muted) return;
+    const t0 = this.ctx.currentTime;
+    const n = Math.floor(this.ctx.sampleRate * dur);
+    const buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i=0;i<n;i++) d[i] = (Math.random()*2-1) * (1 - i/n);
+    const src = this.ctx.createBufferSource(); src.buffer = buf;
+    const g = this.ctx.createGain(); g.gain.value = gain||0.3;
+    const f = this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value = filterFreq||1200;
+    src.connect(f); f.connect(g); g.connect(this.master);
+    src.start(t0);
+  }
+  hop(){ this.tone(420, 0.09, 'square', 0.22, 720); }
+  corn(){ this.tone(880,0.08,'sine',0.28); this.tone(1320,0.10,'sine',0.24,null,0.06); }
+  horn(){ this.tone(180,0.22,'sawtooth',0.16,170); }
+  bell(){ this.tone(1400,0.08,'triangle',0.20); this.tone(1860,0.10,'triangle',0.14,null,0.02); }
+  death(){ this.tone(600,0.18,'square',0.28,120); this.noise(0.25,0.22,900); this.tone(300,0.3,'sawtooth',0.14,90,0.05); }
+  splash(){ this.noise(0.3,0.28,2200); this.tone(500,0.2,'sine',0.14,120); }
+  clear(){ [523,659,784,1046].forEach((f,i)=> this.tone(f,0.16,'square',0.22,null,i*0.09)); }
+  gameover(){ [392,330,262].forEach((f,i)=> this.tone(f,0.28,'square',0.2,null,i*0.14)); }
+}
+
+/* ---------------------------------------------------------------------
+   3. Input manager — keyboard + touch/swipe (PRD AC-2 / AC-13)
+   --------------------------------------------------------------------- */
+class InputManager {
+  constructor(canvas, game){
+    this.game = game;
+    this.canvas = canvas;
+    this._bindKeys();
+    this._bindTouch();
+  }
+  _bindKeys(){
+    window.addEventListener('keydown', (e)=>{
+      const k = e.key.toLowerCase();
+      const arrows = ['arrowup','arrowdown','arrowleft','arrowright',' '];
+      if(arrows.includes(k)) e.preventDefault();
+      this.game.onFirstInput();
+      if(k==='arrowup'||k==='w') this.game.input('up');
+      else if(k==='arrowdown'||k==='s') this.game.input('down');
+      else if(k==='arrowleft'||k==='a') this.game.input('left');
+      else if(k==='arrowright'||k==='d') this.game.input('right');
+      else if(k===' '||k==='enter') this.game.input('confirm');
+      else if(k==='m') this.game.toggleMute();
+    }, {passive:false});
+  }
+  _bindTouch(){
+    let sx=0, sy=0, active=false, moved=false;
+    const start = (x,y)=>{ sx=x; sy=y; active=true; moved=false; };
+    const end = (x,y)=>{
+      if(!active) return; active=false;
+      const dx=x-sx, dy=y-sy;
+      const adx=Math.abs(dx), ady=Math.abs(dy);
+      this.game.onFirstInput();
+      if(adx<24 && ady<24){ this.game.input('tap'); return; }
+      if(adx>ady) this.game.input(dx>0?'right':'left');
+      else this.game.input(dy>0?'down':'up');
+    };
+    this.canvas.addEventListener('pointerdown', (e)=>{ start(e.clientX,e.clientY); }, {passive:true});
+    this.canvas.addEventListener('pointerup',   (e)=>{ end(e.clientX,e.clientY); }, {passive:true});
+    this.canvas.addEventListener('pointercancel',()=>{ active=false; }, {passive:true});
+    // block context menu / gestures
+    this.canvas.addEventListener('contextmenu', e=>e.preventDefault());
+  }
+}
+
+/* =====================================================================
+   MAIN GAME  (chunk 1 scaffold — expanded in later chunks)
+   ===================================================================== */
+class Game {
+  constructor(canvas){
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.audio = new AudioManager();
+    this.state = S.TITLE;
+    this.time = 0;
+    this.scale = 1;
+    this.highScore = 0;
+    this._resize();
+    window.addEventListener('resize', ()=>this._resize());
+    window.addEventListener('orientationchange', ()=>this._resize());
+    this.input_ = new InputManager(canvas, this);
+    this._last = performance.now();
+    requestAnimationFrame((t)=>this._loop(t));
+  }
+
+  /* scale-to-fit + letterbox + devicePixelRatio crisp (PRD §4) */
+  _resize(){
+    const dpr = Math.max(1, Math.min(3, window.devicePixelRatio||1));
+    const availW = window.innerWidth, availH = window.innerHeight;
+    let scale = Math.min(availW/VW, availH/VH);
+    scale = Math.max(0.1, scale);
+    this.scale = scale;
+    this.canvas.style.width  = Math.round(VW*scale) + 'px';
+    this.canvas.style.height = Math.round(VH*scale) + 'px';
+    this.canvas.width  = Math.round(VW*scale*dpr);
+    this.canvas.height = Math.round(VH*scale*dpr);
+    this._renderScale = scale*dpr;
+    this.ctx.imageSmoothingEnabled = false;
+  }
+
+  onFirstInput(){ this.audio.unlock(); }
+  toggleMute(){ const m=this.audio.toggleMute(); return m; }
+
+  /* central input router (expanded per state in later chunks) */
+  input(dir){
+    if(this.state===S.TITLE){
+      if(dir==='confirm'||dir==='tap'||dir==='up') this.startRun();
+      return;
+    }
+    if(this.state===S.GAME_OVER || this.state===S.VICTORY){
+      if(dir==='confirm'||dir==='tap'||dir==='up') this.startRun();
+      return;
+    }
+    if(this.state===S.PLAYING){
+      // movement handled in chunk 2 (Player)
+      if(this.player && (dir==='up'||dir==='down'||dir==='left'||dir==='right'))
+        this.player.tryHop(dir);
+      else if(this.player && dir==='tap')
+        this.player.tryHop('up');
+    }
+  }
+
+  startRun(){
+    // full run init added in later chunks; placeholder transitions state
+    this.state = S.PLAYING;
+  }
+
+  _loop(now){
+    let dt = (now - this._last)/1000;
+    this._last = now;
+    if(dt>0.05) dt = 0.05;          // clamp (tab switch / hitches)
+    this.time += dt;
+    this.update(dt);
+    this.render();
+    requestAnimationFrame((t)=>this._loop(t));
+  }
+
+  update(dt){
+    // populated in later chunks
+  }
+
+  render(){
+    const ctx = this.ctx;
+    ctx.setTransform(this._renderScale,0,0,this._renderScale,0,0);
+    ctx.imageSmoothingEnabled = false;
+    // clear
+    ctx.fillStyle = '#0B0E1A';
+    ctx.fillRect(0,0,VW,VH);
+
+    if(this.state===S.TITLE){
+      this._renderTitlePlaceholder(ctx);
+    } else {
+      ctx.fillStyle = '#16213E';
+      ctx.fillRect(0,0,VW,VH);
+      drawText(ctx, 'LOADING...', VW/2, VH/2-4, 2, '#FFFFFF', 'center', 2);
+    }
+  }
+
+  _renderTitlePlaceholder(ctx){
+    // temporary title until chunk 7 replaces it
+    const g = ctx.createLinearGradient(0,0,0,VH);
+    g.addColorStop(0,'#8FD3F4'); g.addColorStop(1,'#C9F2C0');
+    ctx.fillStyle = g; ctx.fillRect(0,0,VW,VH);
+    drawText(ctx, 'CHICKEN ROAD', VW/2, 90, 3, '#FFFFFF', 'center', 2);
+    const blink = (Math.floor(this.time*2)%2)===0;
+    if(blink) drawText(ctx, 'PRESS SPACE TO START', VW/2, 360, 1, '#FFFFFF', 'center', 2);
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Boot
+   --------------------------------------------------------------------- */
+window.addEventListener('load', ()=>{
+  const canvas = document.getElementById('game');
+  window.__game = new Game(canvas);
+});
+</script>
+</body>
+</html>
