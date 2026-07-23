@@ -639,11 +639,14 @@ class Train {
   update(dt){
     this.timer -= dt; this.blink += dt;
     if(this.state==='idle'){
-      if(this.timer<=0){ this.state='warn'; this.timer=this.warnDur; this.blink=0; this._belled=false; }
+      if(this.timer<=0){ this.state='warn'; this.timer=this.warnDur; this.blink=0; this._lastBlinkIdx=-1; }
     } else if(this.state==='warn'){
-      // bell on each blink cycle
-      const on = Math.floor(this.blink/0.2)%2===0;
-      if(on && !this._belled){ this.game && this.game.audio.bell(); }
+      // bell once per 200ms blink flash (DESIGN.md §4.4), not once per frame
+      const blinkIdx = Math.floor(this.blink/0.2);
+      if(blinkIdx !== this._lastBlinkIdx){
+        this._lastBlinkIdx = blinkIdx;
+        this.game && this.game.audio.bell();
+      }
       if(this.timer<=0){
         this.state='pass';
         this.dir = Math.random()<0.5?1:-1;
