@@ -1,0 +1,1572 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Chicken Road</title>
+<style>
+  html,body{
+    margin:0; padding:0; height:100%; width:100%;
+    background:#0B0E1A; overflow:hidden;
+    touch-action:none; -webkit-user-select:none; user-select:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  #wrap{
+    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    background:#0B0E1A;
+  }
+  #game{
+    image-rendering:pixelated; image-rendering:crisp-edges;
+    display:block; background:#000;
+    touch-action:none;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+</div>
+<script>
+"use strict";
+/* =====================================================================
+   CHICKEN ROAD — single-file HTML5 Canvas arcade game.
+   No external assets, no libraries, no network. All art drawn
+   programmatically; all SFX synthesized via Web Audio API.
+   ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   0. Core constants (virtual/logical resolution — DESIGN.md §1.1)
+   --------------------------------------------------------------------- */
+const TILE   = 48;               // logical px per tile (16px art * 3x)
+const COLS   = 7;                // play column width in tiles
+const VW     = COLS * TILE;      // 336 virtual width
+const VH     = 576;              // virtual height (12 tiles)
+const HUD_H  = 48;               // top HUD strip
+const WORLD_W = COLS * TILE;     // horizontal world span for entities
+const ANCHOR = 415;             // screen-y where camera.y row line sits
+const LEAD   = 2;                // rows player stays ahead of anchor
+const HOP_DUR = 0.15;           // seconds per hop
+const HOP_LIFT = 14;            // px arc apex
+const STAGE_ROWS = 30;          // rows per stage before clear
+
+/* Game states */
+const S = { TITLE:'title', PLAYING:'playing', DYING:'dying', EAGLE:'eagle',
+            STAGE_CLEAR:'stageclear', GAME_OVER:'gameover', VICTORY:'victory' };
+
+/* ---------------------------------------------------------------------
+   1. Bitmap font — hand-drawn 5x7 glyph table (DESIGN.md §1.6 approach 2).
+   Guarantees a crisp blocky arcade look with zero external fonts.
+   --------------------------------------------------------------------- */
+const FONT = (function(){
+  const G = {};
+  const def = (c, rows) => { G[c] = rows; };
+  def(' ', ["00000","00000","00000","00000","00000","00000","00000"]);
+  def('0', ["01110","10001","10011","10101","11001","10001","01110"]);
+  def('1', ["00100","01100","00100","00100","00100","00100","01110"]);
+  def('2', ["01110","10001","00001","00010","00100","01000","11111"]);
+  def('3', ["11111","00010","00100","00010","00001","10001","01110"]);
+  def('4', ["00010","00110","01010","10010","11111","00010","00010"]);
+  def('5', ["11111","10000","11110","00001","00001","10001","01110"]);
+  def('6', ["00110","01000","10000","11110","10001","10001","01110"]);
+  def('7', ["11111","00001","00010","00100","01000","01000","01000"]);
+  def('8', ["01110","10001","10001","01110","10001","10001","01110"]);
+  def('9', ["01110","10001","10001","01111","00001","00010","01100"]);
+  def('A', ["01110","10001","10001","11111","10001","10001","10001"]);
+  def('B', ["11110","10001","10001","11110","10001","10001","11110"]);
+  def('C', ["01110","10001","10000","10000","10000","10001","01110"]);
+  def('D', ["11100","10010","10001","10001","10001","10010","11100"]);
+  def('E', ["11111","10000","10000","11110","10000","10000","11111"]);
+  def('F', ["11111","10000","10000","11110","10000","10000","10000"]);
+  def('G', ["01110","10001","10000","10111","10001","10001","01110"]);
+  def('H', ["10001","10001","10001","11111","10001","10001","10001"]);
+  def('I', ["01110","00100","00100","00100","00100","00100","01110"]);
+  def('J', ["00111","00010","00010","00010","10010","10010","01100"]);
+  def('K', ["10001","10010","10100","11000","10100","10010","10001"]);
+  def('L', ["10000","10000","10000","10000","10000","10000","11111"]);
+  def('M', ["10001","11011","10101","10101","10001","10001","10001"]);
+  def('N', ["10001","11001","10101","10011","10001","10001","10001"]);
+  def('O', ["01110","10001","10001","10001","10001","10001","01110"]);
+  def('P', ["11110","10001","10001","11110","10000","10000","10000"]);
+  def('Q', ["01110","10001","10001","10001","10101","10010","01101"]);
+  def('R', ["11110","10001","10001","11110","10100","10010","10001"]);
+  def('S', ["01110","10001","10000","01110","00001","10001","01110"]);
+  def('T', ["11111","00100","00100","00100","00100","00100","00100"]);
+  def('U', ["10001","10001","10001","10001","10001","10001","01110"]);
+  def('V', ["10001","10001","10001","10001","10001","01010","00100"]);
+  def('W', ["10001","10001","10001","10101","10101","11011","10001"]);
+  def('X', ["10001","10001","01010","00100","01010","10001","10001"]);
+  def('Y', ["10001","10001","01010","00100","00100","00100","00100"]);
+  def('Z', ["11111","00001","00010","00100","01000","10000","11111"]);
+  def(':', ["00000","00100","00000","00000","00100","00000","00000"]);
+  def('!', ["00100","00100","00100","00100","00100","00000","00100"]);
+  def("'", ["00100","00100","00000","00000","00000","00000","00000"]);
+  def('/', ["00001","00010","00100","00100","00100","01000","10000"]);
+  def('.', ["00000","00000","00000","00000","00000","00000","00100"]);
+  def(',', ["00000","00000","00000","00000","00000","00100","01000"]);
+  def('-', ["00000","00000","00000","11111","00000","00000","00000"]);
+  def('?', ["01110","10001","00001","00110","00100","00000","00100"]);
+  def('%', ["11001","11010","00100","01011","10011","00000","00000"]);
+  return G;
+})();
+
+/* draw bitmap text.  align: 'left'|'center'|'right'. outline: 0 none,1 shadow,2 full */
+function textWidth(str, sc){ return str.length * 6 * sc - sc; }
+function drawText(ctx, str, x, y, sc, color, align, outline){
+  str = String(str).toUpperCase();
+  align = align || 'left';
+  outline = (outline===undefined) ? 2 : outline;
+  const w = textWidth(str, sc);
+  let ox = x;
+  if(align==='center') ox = Math.round(x - w/2);
+  else if(align==='right') ox = Math.round(x - w);
+  const drawAt = (dx, dy, col) => {
+    ctx.fillStyle = col;
+    let cx = ox + dx;
+    for(let i=0;i<str.length;i++){
+      const g = FONT[str[i]] || FONT['?'];
+      for(let r=0;r<7;r++){
+        const row = g[r];
+        for(let c=0;c<5;c++){
+          if(row[c]==='1') ctx.fillRect(cx + c*sc, (y+dy) + r*sc, sc, sc);
+        }
+      }
+      cx += 6*sc;
+    }
+  };
+  if(outline===2){
+    const o = 'rgba(0,0,0,0.75)';
+    for(let dx=-sc; dx<=sc; dx+=sc) for(let dy=-sc; dy<=sc; dy+=sc){
+      if(dx||dy) drawAt(dx,dy,o);
+    }
+  } else if(outline===1){
+    drawAt(sc, sc, 'rgba(0,0,0,0.7)');
+  }
+  drawAt(0,0,color);
+}
+
+/* ---------------------------------------------------------------------
+   1b. Chicken sprite — 16x16 pixel map (DESIGN.md §4.1, ported from
+   design/style-guide.html PIXEL_MAPS). Canonical facing = right.
+   --------------------------------------------------------------------- */
+const CHICKEN_PAL = { O:'#1B1611', B:'#FFF3D6', S:'#E8D5A8', C:'#E8432B',
+                      K:'#FFB020', E:'#1B1611', P:'#FFFFFF', W:'#E0B876', L:'#FFB020' };
+const CHICKEN_ROWS = [
+  "................",
+  "...........CC...",
+  "..........OCCO..",
+  ".........OCCCCO.",
+  "........OBBBBPBO",
+  "........OBBBEBKK",
+  ".......OBBBBBBKK",
+  ".....OBBBBBBBB..",
+  "..OBWWWWWBBBBBO.",
+  "..OBWWWWWBBBBBO.",
+  "..OBBBBBBBBBBBO.",
+  "...OBBBBBBBBBO..",
+  "....OSSSSSSSO...",
+  ".....OSSSSSO....",
+  ".....LL..LL.....",
+  ".....OO..OO....."
+];
+/* draws chicken in 16x16 sprite space; headDy bobs the head rows (0-6),
+   wingOut adds flared wing pixels for the mid-hop flap pose. */
+function drawChickenSprite(ctx, headDy, wingOut){
+  headDy = headDy||0;
+  for(let y=0;y<16;y++){
+    const row = CHICKEN_ROWS[y];
+    const dy = (y<=6) ? headDy : 0;
+    for(let x=0;x<16;x++){
+      const ch = row[x];
+      if(ch==='.') continue;
+      ctx.fillStyle = CHICKEN_PAL[ch];
+      ctx.fillRect(x, y+dy, 1, 1);
+    }
+  }
+  if(wingOut){
+    ctx.fillStyle = '#1B1611';
+    ctx.fillRect(1,7,3,3); ctx.fillRect(12,7,3,3);
+    ctx.fillStyle = '#E0B876';
+    ctx.fillRect(1,7,2,2); ctx.fillRect(13,7,2,2);
+  }
+}
+
+/* grid helpers ------------------------------------------------------- */
+function colCenterX(c){ return c*TILE + TILE/2; }
+function colOf(x){ return Math.max(0, Math.min(COLS-1, Math.round(x/TILE - 0.5))); }
+
+/* ---------------------------------------------------------------------
+   1c. Particle system (DESIGN.md §5) — dust, feathers, splash, sparkle,
+   expanding rings, ambient. All simple filled shapes, no images.
+   --------------------------------------------------------------------- */
+class Particle {
+  constructor(o){
+    this.x=o.x; this.y=o.y; this.vx=o.vx||0; this.vy=o.vy||0;
+    this.g=o.g||0; this.size=o.size||2; this.color=o.color||'#fff';
+    this.life=o.life||0.3; this.max=this.life; this.type=o.type||'rect';
+    this.rot=Math.random()*Math.PI; this.vr=(Math.random()-0.5)*8;
+    this.drag=o.drag||0;
+  }
+  update(dt){
+    this.life -= dt;
+    this.vy += this.g*dt;
+    if(this.drag){ this.vx *= (1-this.drag*dt); this.vy *= (1-this.drag*dt); }
+    this.x += this.vx*dt; this.y += this.vy*dt; this.rot += this.vr*dt;
+    return this.life>0;
+  }
+  render(ctx){
+    const a = Math.max(0, this.life/this.max);
+    ctx.globalAlpha = a;
+    if(this.type==='ring'){
+      const r = this.size*(1 + (1-a)*2.2);
+      ctx.strokeStyle = this.color; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, Math.PI*2); ctx.stroke();
+    } else if(this.type==='feather'){
+      ctx.save(); ctx.translate(this.x,this.y); ctx.rotate(this.rot);
+      ctx.fillStyle = this.color;
+      ctx.fillRect(-this.size, -1, this.size*2, 2);
+      ctx.restore();
+    } else if(this.type==='spark'){
+      ctx.fillStyle = this.color;
+      ctx.fillRect(this.x-this.size, this.y, this.size*2, 1);
+      ctx.fillRect(this.x, this.y-this.size, 1, this.size*2);
+    } else {
+      ctx.fillStyle = this.color;
+      ctx.fillRect(this.x|0, this.y|0, this.size, this.size);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+class ParticleSystem {
+  constructor(){ this.list = []; }
+  clear(){ this.list.length = 0; }
+  add(o){ this.list.push(new Particle(o)); }
+  update(dt){
+    for(let i=this.list.length-1;i>=0;i--){
+      if(!this.list[i].update(dt)) this.list.splice(i,1);
+    }
+  }
+  render(ctx){ for(const p of this.list) p.render(ctx); }
+
+  dust(x,y,tint){
+    const col = tint || '#C9BFA6';
+    const n = 3 + (Math.random()*3|0);
+    for(let i=0;i<n;i++){
+      const a = (i/n)*Math.PI*2 + Math.random();
+      this.add({x,y, vx:Math.cos(a)*30, vy:Math.sin(a)*18 - 24,
+        g:20, size:2+(Math.random()*2|0), color:col, life:0.25+Math.random()*0.08});
+    }
+  }
+  feathers(x,y){
+    const cols = ['#FFF3D6','#E8D5A8','#E0B876'];
+    for(let i=0;i<9;i++){
+      const a = (i/9)*Math.PI*2 + Math.random()*0.4;
+      const sp = 60+Math.random()*80;
+      this.add({x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - 40,
+        g:220, size:2+(Math.random()*2|0), color:cols[i%3], life:0.5+Math.random()*0.2, type:'feather'});
+    }
+  }
+  splash(x,y,foam,water){
+    for(let i=0;i<11;i++){
+      const a = (i/11)*Math.PI*2;
+      const sp = 50+Math.random()*70;
+      this.add({x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - 60,
+        g:260, size:2, color:(i%2?foam:water), life:0.4+Math.random()*0.2});
+    }
+    this.add({x,y, size:6, color:foam, life:0.5, type:'ring'});
+  }
+  sparkle(x,y){
+    for(let i=0;i<6;i++){
+      const a = (i/6)*Math.PI*2;
+      this.add({x,y, vx:Math.cos(a)*40, vy:Math.sin(a)*40,
+        size:2, color:(i%2?'#FFD23F':'#FFFFFF'), life:0.28+Math.random()*0.07, type:'spark'});
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------
+   2. Audio manager — Web Audio synthesized SFX (DESIGN.md / PRD AC-11)
+   --------------------------------------------------------------------- */
+class AudioManager {
+  constructor(){
+    this.ctx = null;
+    this.muted = false;
+    this.unlocked = false;
+    this.master = null;
+  }
+  ensure(){
+    if(this.ctx) return;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new AC();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.5;
+      this.master.connect(this.ctx.destination);
+    } catch(e){ this.ctx = null; }
+  }
+  unlock(){
+    this.ensure();
+    if(this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+    this.unlocked = true;
+  }
+  toggleMute(){ this.muted = !this.muted; return this.muted; }
+  /* generic tone with optional frequency sweep */
+  tone(freq, dur, type, gain, sweepTo, delay){
+    if(!this.ctx || this.muted) return;
+    const t0 = this.ctx.currentTime + (delay||0);
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = type || 'square';
+    osc.frequency.setValueAtTime(freq, t0);
+    if(sweepTo) osc.frequency.exponentialRampToValueAtTime(Math.max(1,sweepTo), t0+dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(gain||0.3, t0+0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+    osc.connect(g); g.connect(this.master);
+    osc.start(t0); osc.stop(t0+dur+0.02);
+  }
+  noise(dur, gain, filterFreq){
+    if(!this.ctx || this.muted) return;
+    const t0 = this.ctx.currentTime;
+    const n = Math.floor(this.ctx.sampleRate * dur);
+    const buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i=0;i<n;i++) d[i] = (Math.random()*2-1) * (1 - i/n);
+    const src = this.ctx.createBufferSource(); src.buffer = buf;
+    const g = this.ctx.createGain(); g.gain.value = gain||0.3;
+    const f = this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value = filterFreq||1200;
+    src.connect(f); f.connect(g); g.connect(this.master);
+    src.start(t0);
+  }
+  hop(){ this.tone(420, 0.09, 'square', 0.22, 720); }
+  corn(){ this.tone(880,0.08,'sine',0.28); this.tone(1320,0.10,'sine',0.24,null,0.06); }
+  horn(){ this.tone(180,0.22,'sawtooth',0.16,170); }
+  bell(){ this.tone(1400,0.08,'triangle',0.20); this.tone(1860,0.10,'triangle',0.14,null,0.02); }
+  death(){ this.tone(600,0.18,'square',0.28,120); this.noise(0.25,0.22,900); this.tone(300,0.3,'sawtooth',0.14,90,0.05); }
+  splash(){ this.noise(0.3,0.28,2200); this.tone(500,0.2,'sine',0.14,120); }
+  clear(){ [523,659,784,1046].forEach((f,i)=> this.tone(f,0.16,'square',0.22,null,i*0.09)); }
+  gameover(){ [392,330,262].forEach((f,i)=> this.tone(f,0.28,'square',0.2,null,i*0.14)); }
+}
+
+/* ---------------------------------------------------------------------
+   3. Input manager — keyboard + touch/swipe (PRD AC-2 / AC-13)
+   --------------------------------------------------------------------- */
+class InputManager {
+  constructor(canvas, game){
+    this.game = game;
+    this.canvas = canvas;
+    this._bindKeys();
+    this._bindTouch();
+  }
+  _bindKeys(){
+    window.addEventListener('keydown', (e)=>{
+      const k = e.key.toLowerCase();
+      const arrows = ['arrowup','arrowdown','arrowleft','arrowright',' '];
+      if(arrows.includes(k)) e.preventDefault();
+      this.game.onFirstInput();
+      if(k==='arrowup'||k==='w') this.game.input('up');
+      else if(k==='arrowdown'||k==='s') this.game.input('down');
+      else if(k==='arrowleft'||k==='a') this.game.input('left');
+      else if(k==='arrowright'||k==='d') this.game.input('right');
+      else if(k===' '||k==='enter') this.game.input('confirm');
+      else if(k==='m') this.game.toggleMute();
+    }, {passive:false});
+  }
+  _bindTouch(){
+    let sx=0, sy=0, active=false, moved=false;
+    const start = (x,y)=>{
+      this.game.onFirstInput();
+      if(this.game.hitMute(x,y)){ active=false; return; }   // mute button swallows input
+      sx=x; sy=y; active=true; moved=false;
+    };
+    const end = (x,y)=>{
+      if(!active) return; active=false;
+      const dx=x-sx, dy=y-sy;
+      const adx=Math.abs(dx), ady=Math.abs(dy);
+      this.game.onFirstInput();
+      if(adx<24 && ady<24){ this.game.input('tap'); return; }
+      if(adx>ady) this.game.input(dx>0?'right':'left');
+      else this.game.input(dy>0?'down':'up');
+    };
+    this.canvas.addEventListener('pointerdown', (e)=>{ start(e.clientX,e.clientY); }, {passive:true});
+    this.canvas.addEventListener('pointerup',   (e)=>{ end(e.clientX,e.clientY); }, {passive:true});
+    this.canvas.addEventListener('pointercancel',()=>{ active=false; }, {passive:true});
+    // block context menu / gestures
+    this.canvas.addEventListener('contextmenu', e=>e.preventDefault());
+  }
+}
+
+/* ---------------------------------------------------------------------
+   3b. Stage configuration — palettes (DESIGN.md §3) + difficulty (PRD §7.5)
+   --------------------------------------------------------------------- */
+const STAGES = [
+  { // Stage 1 — Countryside (Day)
+    name:'COUNTRYSIDE',
+    scroll:0.34, vMin:42, vMax:74, vehPerLane:[1,2],
+    logMin:26, logMax:44, warn:1.4, trainSpeed:820,
+    weights:{ grass:0.50, road:0.36, river:0.11, rail:0.03 },
+    col:{
+      skyTop:'#8FD3F4', skyBottom:'#C9F2C0', sun:'#FFE066',
+      hillFar:'#A6DE7A', hillNear:'#7FC24C',
+      safe:'#6ABE30', safeAlt:'#4F9A28', safeEdge:'#3E7A1F',
+      road:'#4A4A55', roadAlt:'#43434C', marking:'#F4E285',
+      river:'#3AA6D9', riverDark:'#2C86B0', foam:'#BEEFFF',
+      treeCanopy:'#2E7D32', treeHi:'#3E9E42', treeTrunk:'#6B4226',
+      rock:'#9C9C9C', rockShadow:'#6E6E6E',
+      cars:['#E4572E','#3C91E6','#FFC93C'], carWin:'#BFE3FF', headlight:'#FFF4B8',
+      railBed:'#5B4A34', railMetal:'#C7C2B8', railRust:'#8B5E3C',
+      signal:'#FFB100', signalOff:'#4a3a10', logBody:'#A9743F', logDark:'#8A5C2E', logHi:'#C08F52',
+      obstacle:'#9C9C9C'
+    }
+  },
+  { // Stage 2 — City (Night)
+    name:'CITY',
+    scroll:0.52, vMin:74, vMax:124, vehPerLane:[2,3],
+    logMin:46, logMax:70, warn:1.15, trainSpeed:940,
+    weights:{ grass:0.34, road:0.46, river:0.12, rail:0.08 },
+    col:{
+      skyTop:'#1A1A2E', skyBottom:'#16213E', sun:null,
+      skyline:'#0F1024', star:'#E8E8F0', building:'#23233A', windowLit:'#FFCB57',
+      safe:'#2F6B3D', safeAlt:'#24532F', safeEdge:'#1C3F24',
+      road:'#2B2B36', roadAlt:'#26262F', marking:'#FFD866',
+      river:'#1D4E63', riverDark:'#17394A', foam:'#7FD8E8',
+      treeCanopy:'#234a2b', treeHi:'#2f6b3d', treeTrunk:'#3a2a1a',
+      rock:'#545461', rockShadow:'#3a3a44',
+      cars:['#464655','#F4C430','#3C6FE6'], carWin:'#FFF6D0', headlight:'#FFF6D0', taillight:'#FF3B3B',
+      railBed:'#2b2b36', railMetal:'#C7C2B8', railRust:'#5a4632',
+      signal:'#FFB100', signalOff:'#3a2c08', logBody:'#5a4632', logDark:'#3f3020', logHi:'#7a5c3a',
+      streetGlow:'#FFD866', obstacle:'#545461'
+    }
+  },
+  { // Stage 3 — Industrial (Hazard-lit)
+    name:'INDUSTRIAL',
+    scroll:0.78, vMin:112, vMax:172, vehPerLane:[2,4],
+    logMin:0, logMax:0, warn:0.9, trainSpeed:1080,
+    weights:{ grass:0.34, road:0.40, river:0.0, rail:0.26 },
+    col:{
+      skyTop:'#2A211C', skyBottom:'#1B1613', smokestack:'#171310', ember:'#FF7A29',
+      safe:'#6B6153', safeAlt:'#5A5245', safeEdge:'#463F34',
+      road:'#3A342E', roadAlt:'#332E29', marking:'#FFB100', hazardA:'#FFB100', hazardB:'#1A1A1A',
+      river:'#1D4E63', riverDark:'#17394A', foam:'#7FD8E8',
+      treeCanopy:'#3a3733', treeHi:'#55524d', treeTrunk:'#2a2622',
+      rock:'#C0392B', rockShadow:'#7A2418',
+      cars:['#55524D','#3A3733','#6b5a3b'], carWin:'#FFD24D', headlight:'#FFD24D',
+      railBed:'#4A423A', railMetal:'#C7C2B8', railRust:'#8B5E3C',
+      signal:'#FF2E2E', signalOff:'#3a140f', logBody:'#4A423A', logDark:'#332e29', logHi:'#6b5a3b',
+      obstacle:'#C0392B'
+    }
+  }
+];
+
+/* ---------------------------------------------------------------------
+   3c. Lane — base grid row.  Holds its type + content (obstacles,
+   vehicles, logs, train, corn).  (DESIGN.md §4.7 / PRD §7.3)
+   Vehicles/Log/Train classes are populated in chunk 4.
+   --------------------------------------------------------------------- */
+class Lane {
+  constructor(game, row, type){
+    this.game = game; this.row = row; this.type = type;
+    this.col = game.stageCfg().col;
+    this.obstacles = [];   // {col,type:'tree'|'rock'}
+    this.vehicles = [];    // Vehicle[]
+    this.logs = [];        // Log[]
+    this.train = null;     // Train
+    this.corn = null;      // {col, phase, collected}
+    this.shimmer = Math.random()*10;
+  }
+  blocks(col){
+    for(const o of this.obstacles) if(o.col===col) return true;
+    return false;
+  }
+  update(dt){
+    for(const v of this.vehicles) v.update(dt);
+    for(const l of this.logs) l.update(dt);
+    if(this.train) this.train.update(dt);
+    if(this.corn && !this.corn.collected) this.corn.phase += dt;
+    if(this.type==='river') this.shimmer += dt;
+  }
+  /* renderBase draws the ground; renderProps draws entities above player-lane */
+  renderBase(ctx, top){
+    const c = this.col, alt = (this.row%2===0);
+    if(this.type==='grass'){
+      ctx.fillStyle = alt ? c.safe : c.safeAlt; ctx.fillRect(0,top,VW,TILE);
+      ctx.fillStyle = c.safeEdge;
+      for(let i=0;i<6;i++){ const bx=((this.row*53+i*61)%VW); ctx.fillRect(bx, top+10+((i*13)%28),2,3); }
+    } else if(this.type==='road'){
+      ctx.fillStyle = alt ? c.road : c.roadAlt; ctx.fillRect(0,top,VW,TILE);
+      if(this.game.stage===2){ // industrial hazard tape edges
+        for(let x=0;x<VW;x+=16){ ctx.fillStyle=c.hazardA; ctx.fillRect(x,top+TILE/2-2,8,4); ctx.fillStyle=c.hazardB; ctx.fillRect(x+8,top+TILE/2-2,8,4); }
+      } else {
+        ctx.fillStyle = c.marking;
+        for(let x=4;x<VW;x+=16) ctx.fillRect(x, top+TILE/2-2, 8, 4);
+      }
+    } else if(this.type==='river'){
+      ctx.fillStyle = c.river; ctx.fillRect(0,top,VW,TILE);
+      ctx.fillStyle = c.riverDark; ctx.fillRect(0,top,VW,4); ctx.fillRect(0,top+TILE-4,VW,4);
+      ctx.fillStyle = c.foam; ctx.globalAlpha=0.5;
+      const off = (this.shimmer*18)%40;
+      for(let x=-40;x<VW;x+=40){ ctx.fillRect(x+off, top+14, 12,2); ctx.fillRect(x+off+20, top+30, 12,2); }
+      ctx.globalAlpha=1;
+    } else if(this.type==='rail'){
+      ctx.fillStyle = c.railBed; ctx.fillRect(0,top,VW,TILE);
+      ctx.fillStyle = c.railRust;
+      for(let x=2;x<VW;x+=12) ctx.fillRect(x, top+10, 4, TILE-20);
+      ctx.fillStyle = c.railMetal;
+      ctx.fillRect(0, top+14, VW, 3); ctx.fillRect(0, top+TILE-16, VW, 3);
+    }
+    // obstacles + corn drawn as props but corn/tree need to sit above ground
+    for(const o of this.obstacles) this._drawObstacle(ctx, top, o);
+    if(this.corn && !this.corn.collected) this._drawCorn(ctx, top);
+  }
+  _drawObstacle(ctx, top, o){
+    const c=this.col; const x=colCenterX(o.col);
+    if(o.type==='tree'){
+      ctx.fillStyle=c.treeTrunk; ctx.fillRect(x-4, top+TILE-18, 8, 18);
+      ctx.fillStyle=c.treeCanopy; ctx.fillRect(x-16, top-14, 32, 30);
+      ctx.fillStyle=c.treeHi; ctx.fillRect(x-12, top-10, 12, 12);
+    } else {
+      ctx.fillStyle=c.rockShadow; ctx.fillRect(x-14, top+TILE-16, 28, 14);
+      ctx.fillStyle=c.rock; ctx.fillRect(x-12, top+TILE-20, 22, 14);
+      ctx.fillStyle=c.rock; ctx.fillRect(x-6, top+TILE-24, 12, 8);
+    }
+  }
+  renderProps(ctx, top){
+    if(this.train){ this.train.renderSignal(ctx, top); this.train.render(ctx, top); }
+    for(const v of this.vehicles) v.render(ctx, top);
+    for(const l of this.logs) l.render(ctx, top);
+  }
+  _drawCorn(ctx, top){
+    const x=colCenterX(this.corn.col), y=top+TILE/2;
+    const cycle=(this.corn.phase*1000%480)/480;
+    let sq=Math.abs(Math.cos(cycle*Math.PI*2)); sq=Math.max(0.14,sq);
+    ctx.save(); ctx.translate(x,y); ctx.scale(sq,1); ctx.translate(-6,-6);
+    ctx.fillStyle='#7ABF4C'; ctx.fillRect(3,7,6,4);
+    ctx.fillStyle='#FFD23F';
+    ctx.fillRect(3,2,2,2); ctx.fillRect(6,2,2,2); ctx.fillRect(4,4,2,2); ctx.fillRect(7,4,2,2); ctx.fillRect(3,6,6,1);
+    ctx.restore();
+  }
+}
+
+/* ---------------------------------------------------------------------
+   3c-i. Vehicle — road hazard w/ headlight glow (DESIGN.md §4.2)
+   --------------------------------------------------------------------- */
+class Vehicle {
+  constructor(x, speed, dir, kind, w, col){
+    this.x=x; this.speed=speed; this.dir=dir; this.kind=kind; // car|truck|bus
+    this.w = w; this.h = 30;
+    this.color = col.body; this.win = col.win; this.glow = col.glow; this.tail = col.tail;
+  }
+  update(dt){
+    this.x += this.speed*this.dir*dt;
+    const pad = this.w/2 + 20;
+    if(this.dir>0 && this.x > WORLD_W+pad) this.x = -pad;
+    else if(this.dir<0 && this.x < -pad) this.x = WORLD_W+pad;
+  }
+  hits(px){ return Math.abs(px - this.x) < (this.w/2 + 12); }
+  render(ctx, top){
+    const y = top + (TILE-this.h)/2, w=this.w, h=this.h, x=this.x;
+    // headlight glow (the one allowed soft-edge element)
+    const gx = x + this.dir*(w/2);
+    const grad = ctx.createRadialGradient(gx,y+h/2,1,gx,y+h/2,22);
+    grad.addColorStop(0,this.glow); grad.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=grad; ctx.fillRect(gx-22,y-6,44,h+12);
+    // tail light
+    if(this.tail){ ctx.fillStyle=this.tail; ctx.fillRect(x-this.dir*(w/2)-1,y+h/2-3,3,6); }
+    // body
+    ctx.fillStyle='#1A1A1A'; ctx.fillRect(x-w/2, y, w, h);            // outline/wheels base
+    ctx.fillStyle=this.color; ctx.fillRect(x-w/2+2, y+2, w-4, h-4);
+    // cabin/windows
+    ctx.fillStyle=this.win;
+    if(this.kind==='truck'){
+      const cabX = this.dir>0 ? x+w/2-12 : x-w/2+4;
+      ctx.fillStyle=this.color; // cab differentiation via darker handled by color already
+      ctx.fillStyle=this.win; ctx.fillRect(cabX, y+5, 8, 8);
+    } else if(this.kind==='bus'){
+      for(let i=0;i<4;i++) ctx.fillRect(x-w/2+8+i*(w-16)/4, y+6, (w-20)/4-2, 8);
+    } else {
+      ctx.fillRect(x-w/2+7, y+5, (w-16)/2-1, 8);
+      ctx.fillRect(x+3, y+5, (w-16)/2-1, 8);
+    }
+    // wheels
+    ctx.fillStyle='#0D0D0D';
+    ctx.fillRect(x-w/2+5, y+h-4, 7, 4); ctx.fillRect(x+w/2-12, y+h-4, 7, 4);
+  }
+}
+
+/* ---------------------------------------------------------------------
+   3c-ii. Log / lily pad — river platform (DESIGN.md §4.3)
+   --------------------------------------------------------------------- */
+class Log {
+  constructor(x, speed, dir, w, col, isPad){
+    this.x=x; this.speed=speed; this.dir=dir; this.w=w; this.h=20;
+    this.col=col; this.isPad=isPad; this.bob=Math.random()*Math.PI*2;
+  }
+  update(dt){
+    this.x += this.speed*this.dir*dt; this.bob += dt*5;
+    const pad=this.w/2+24;
+    if(this.dir>0 && this.x>WORLD_W+pad) this.x=-pad;
+    else if(this.dir<0 && this.x<-pad) this.x=WORLD_W+pad;
+  }
+  carries(px){ return Math.abs(px - this.x) < this.w/2; }
+  render(ctx, top){
+    const y = top + (TILE-this.h)/2 + Math.sin(this.bob)*1;
+    const x=this.x, w=this.w;
+    if(this.isPad){
+      ctx.fillStyle=this.col.logDark; ctx.fillRect(x-w/2, y+2, w, this.h-4);
+      ctx.fillStyle='#3C9D45'; ctx.fillRect(x-w/2+2, y+3, w-4, this.h-6);
+      ctx.fillStyle='#2C7A34'; ctx.fillRect(x-1, y+4, 2, this.h-8);
+    } else {
+      ctx.fillStyle=this.col.logDark; ctx.fillRect(x-w/2, y, w, this.h);
+      ctx.fillStyle=this.col.logBody; ctx.fillRect(x-w/2+2, y+2, w-4, this.h-4);
+      ctx.fillStyle=this.col.logDark; ctx.fillRect(x-w/2+3, y+6, w-6, 1); ctx.fillRect(x-w/2+3, y+13, w-6, 1);
+      ctx.fillStyle=this.col.logHi; ctx.fillRect(x-w/2, y+3, 3, this.h-6); ctx.fillRect(x+w/2-3, y+3, 3, this.h-6);
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------
+   3c-iii. Train — telegraphed fast rail hazard (DESIGN.md §4.4)
+   --------------------------------------------------------------------- */
+class Train {
+  constructor(cfg, col){
+    this.cfg=cfg; this.col=col;
+    this.state='idle';                       // idle → warn → pass → cooldown
+    this.timer = 1.5 + Math.random()*3.5;
+    this.dir = Math.random()<0.5?1:-1;
+    this.x = 0; this.speed = cfg.trainSpeed;
+    this.warnDur = cfg.warn; this.blink=0;
+    this.len = 5*32;                         // multi-car length
+  }
+  update(dt){
+    this.timer -= dt; this.blink += dt;
+    if(this.state==='idle'){
+      if(this.timer<=0){ this.state='warn'; this.timer=this.warnDur; this.blink=0; this._lastBlinkIdx=-1; }
+    } else if(this.state==='warn'){
+      // bell once per 200ms blink flash (DESIGN.md §4.4), not once per frame
+      const blinkIdx = Math.floor(this.blink/0.2);
+      if(blinkIdx !== this._lastBlinkIdx){
+        this._lastBlinkIdx = blinkIdx;
+        this.game && this.game.audio.bell();
+      }
+      if(this.timer<=0){
+        this.state='pass';
+        this.dir = Math.random()<0.5?1:-1;
+        this.x = this.dir>0 ? -this.len/2-30 : WORLD_W+this.len/2+30;
+      }
+    } else if(this.state==='pass'){
+      this.x += this.speed*this.dir*dt;
+      if((this.dir>0 && this.x > WORLD_W+this.len/2+30) ||
+         (this.dir<0 && this.x < -this.len/2-30)){
+        this.state='cooldown'; this.timer = 0.6 + Math.random()*1.5;
+      }
+    } else if(this.state==='cooldown'){
+      if(this.timer<=0){ this.state='idle'; this.timer=2+Math.random()*4; }
+    }
+  }
+  active(){ return this.state==='pass'; }
+  warning(){ return this.state==='warn'; }
+  hits(px){
+    if(this.state!=='pass') return false;
+    return Math.abs(px - this.x) < this.len/2;
+  }
+  renderSignal(ctx, top){
+    // pole-mounted twin-lamp signal at right edge
+    const sx=VW-12, sy=top+6;
+    ctx.fillStyle='#171310'; ctx.fillRect(sx-2, sy-2, 10, 22);
+    const warn=this.warning();
+    const on = warn && (Math.floor(this.blink/0.2)%2===0);
+    ctx.fillStyle = on ? this.col.signal : this.col.signalOff; ctx.fillRect(sx, sy, 5,5);
+    ctx.fillStyle = (warn && !on) ? this.col.signal : this.col.signalOff; ctx.fillRect(sx, sy+9, 5,5);
+  }
+  render(ctx, top){
+    if(this.state!=='pass') return;
+    const y = top+6, h=TILE-12;
+    // motion-blur ghosts
+    for(let i=3;i>=1;i--){
+      ctx.globalAlpha=0.12*i;
+      ctx.fillStyle=this.col.railRust;
+      ctx.fillRect(this.x - this.dir*(i*14) - this.len/2, y, this.len, h);
+    }
+    ctx.globalAlpha=1;
+    // cars
+    for(let i=0;i<5;i++){
+      const cx = this.x - this.len/2 + i*32 + 2;
+      ctx.fillStyle='#22201d'; ctx.fillRect(cx, y, 28, h);
+      ctx.fillStyle=this.col.railMetal; ctx.fillRect(cx+3, y+5, 6, 5);
+      ctx.fillStyle=this.col.railMetal; ctx.fillRect(cx+3, y+h-4, 22, 2);
+    }
+    // headlamp glow on leading car
+    const gx = this.x + this.dir*(this.len/2);
+    const grad=ctx.createRadialGradient(gx,y+h/2,1,gx,y+h/2,26);
+    grad.addColorStop(0,'#FFE9A6'); grad.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=grad; ctx.fillRect(gx-26,y-8,52,h+16);
+  }
+}
+
+/* ---------------------------------------------------------------------
+   3d. Eagle — fall-behind fail state (DESIGN.md §4.6)
+   --------------------------------------------------------------------- */
+class Eagle {
+  constructor(game){
+    this.game=game; this.t=0; this.dur=0.85; this.done=false;
+    const p=game.player;
+    this.targetX=p.x; this.targetY=game.camera.tileTop(p.row)+TILE/2;
+    this.startX=p.x+70; this.startY=-40;
+    this.x=this.startX; this.y=this.startY; this.grabbed=false;
+  }
+  update(dt){
+    this.t+=dt; const k=Math.min(1,this.t/this.dur);
+    if(k<0.55){
+      const a=k/0.55; this.x=this.startX+(this.targetX-this.startX)*a; this.y=this.startY+(this.targetY-this.startY)*a; this.scale=0.4+a*0.6;
+    } else if(k<0.7){ this.grabbed=true; this.x=this.targetX; this.y=this.targetY; this.scale=1;
+    } else { const a=(k-0.7)/0.3; this.x=this.targetX; this.y=this.targetY-a*260; this.scale=1;
+      if(this.game.player) this.game.player.deathY=this.y; }
+    if(k>=1) this.done=true;
+  }
+  render(ctx){
+    // vignette darken
+    const k=Math.min(1,this.t/this.dur);
+    ctx.fillStyle='rgba(0,0,0,'+(0.4*Math.min(1,k*1.5))+')';
+    ctx.fillRect(0,0,VW,VH);
+    const s=(this.scale||0.4)*3;
+    ctx.save(); ctx.translate(this.x,this.y); ctx.scale(s,s); ctx.translate(-12,-12);
+    // eagle 24x24-ish
+    ctx.fillStyle='#1B1611'; ctx.fillRect(2,10,20,3);
+    ctx.fillStyle='#4A3B32'; ctx.fillRect(3,11,18,2); ctx.fillRect(9,7,6,9);
+    if(!this.grabbed){ ctx.fillStyle='#4A3B32'; ctx.fillRect(4,9,4,3); ctx.fillRect(16,9,4,3); }
+    ctx.fillStyle='#E8DCC8'; ctx.fillRect(10,7,4,3);
+    ctx.fillStyle='#FFB020'; ctx.fillRect(13,8,2,1);
+    ctx.fillStyle='#1B1611'; ctx.fillRect(11,8,1,1);
+    ctx.fillStyle='#FFB020'; ctx.fillRect(9,16,2,3); ctx.fillRect(13,16,2,3);
+    ctx.restore();
+    // grabbed chicken held in talons
+    if(this.grabbed || (this.scale>=1)){
+      ctx.save(); ctx.translate(this.x, this.y+18); ctx.scale(1.4,1.4); ctx.translate(-8,-16);
+      drawChickenSprite(ctx,0,false); ctx.restore();
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------
+   4. Camera — smooth eased upward push + lookahead (DESIGN/PRD §7.2)
+   (basic here; parallax + tuning expanded in later chunks)
+   --------------------------------------------------------------------- */
+class Camera {
+  constructor(){
+    this.y = -LEAD;          // row at the anchor line (float)
+    this.minY = -LEAD;       // monotonically-rising auto-scroll floor
+    this.look = 0;           // lookahead offset (rows)
+    this.scroll = 0.35;      // rows/sec auto push (per stage)
+    this.shakeX = 0; this.shakeY = 0; this._sMag = 0; this._sT = 0;
+  }
+  reset(scroll){
+    this.y = -LEAD; this.minY = -LEAD; this.look = 0;
+    this.scroll = scroll; this.shakeX=0; this.shakeY=0; this._sMag=0; this._sT=0;
+  }
+  shake(mag){ this._sMag = Math.max(this._sMag, mag); this._sT = 0.2; }
+  update(dt, player, active){
+    if(active){
+      this.minY += this.scroll * dt;                 // never stops rising
+      const targetLook = player.lookDir * 0.5;
+      this.look += (targetLook - this.look) * Math.min(1, dt*6);
+      const desired = Math.max(this.minY, player.visualRow() - LEAD) + this.look;
+      this.y += (desired - this.y) * (1 - Math.exp(-dt*7));
+    }
+    // shake decay
+    if(this._sT > 0){
+      this._sT -= dt;
+      const k = Math.max(0, this._sT/0.2);
+      const amp = this._sMag * k;
+      this.shakeX = (Math.random()*2-1)*amp;
+      this.shakeY = (Math.random()*2-1)*amp;
+      if(this._sT<=0){ this.shakeX=0; this.shakeY=0; this._sMag=0; }
+    }
+  }
+  tileTop(row){ return ANCHOR - (row - this.y + 1)*TILE; }
+}
+
+/* ---------------------------------------------------------------------
+   5. Player — grid hop with squash/stretch, wing flap, input buffer,
+   boundary/obstacle blocking, death poses (DESIGN.md §4.1)
+   --------------------------------------------------------------------- */
+class Player {
+  constructor(game){
+    this.game = game;
+    this.row = 0;
+    this.x = colCenterX(3);      // center column
+    this.facing = 1;
+    this.lookDir = 0;            // -1/0/1 for camera lookahead
+    this.hopping = false;
+    this.t = 0;
+    this.fromX = this.x; this.toX = this.x;
+    this.fromRow = 0; this.toRow = 0;
+    this.buffer = null;
+    this.idlePhase = 0;
+    this.ridingLog = null; this.rideOffset = 0;
+    this.dead = false; this.deathKind = null; this.deathT = 0;
+    this.deathX = this.x; this.deathY = 0;
+  }
+  visualRow(){
+    if(this.hopping){
+      const p = this._ease(this.t);
+      return this.fromRow + (this.toRow - this.fromRow)*p;
+    }
+    return this.row;
+  }
+  _ease(t){ return t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2; } // easeInOutQuad
+
+  col(){ return colOf(this.x); }
+
+  tryHop(dir){
+    if(this.dead) return;
+    if(this.hopping){
+      if(this.t > 0.65) this.buffer = dir;   // input buffer (DESIGN §4.1)
+      return;
+    }
+    this._startHop(dir);
+  }
+  _startHop(dir){
+    let targetRow = this.row, targetX = colCenterX(this.col());
+    const c = this.col();
+    if(dir==='up'){ targetRow = this.row+1; this.lookDir = 0; }
+    else if(dir==='down'){ if(this.row<=0){ return; } targetRow = this.row-1; this.lookDir = 0; }
+    else if(dir==='left'){ if(c<=0){ return; } targetX = colCenterX(c-1); this.facing = -1; this.lookDir = -1; }
+    else if(dir==='right'){ if(c>=COLS-1){ return; } targetX = colCenterX(c+1); this.facing = 1; this.lookDir = 1; }
+    else return;
+
+    // obstacle blocking on target grass tile
+    const lane = this.game.laneAt(targetRow);
+    const targetCol = colOf(targetX);
+    if(lane && lane.blocks(targetCol)){
+      this.game.audio.tone(140,0.05,'square',0.12); // soft bump
+      return;
+    }
+    // begin hop
+    this.hopping = true; this.t = 0;
+    this.fromX = this.x; this.toX = targetX;
+    this.fromRow = this.row; this.toRow = targetRow;
+    this.ridingLog = null;
+    this.game.audio.hop();
+    // dust at origin
+    const oy = this.game.camera.tileTop(this.row) + TILE - 4;
+    this.game.particles.dust(this.x, oy, this.game.dustTint());
+  }
+  _land(){
+    this.row = this.toRow; this.x = this.toX;
+    this.hopping = false; this.t = 0; this.lookDir = 0;
+    const dy = this.game.camera.tileTop(this.row) + TILE - 4;
+    this.game.particles.dust(this.x, dy, this.game.dustTint());
+    this.game.onPlayerLanded();
+    if(this.buffer){ const b=this.buffer; this.buffer=null; this._startHop(b); }
+  }
+  update(dt){
+    if(this.dead){ this.deathT += dt; return; }
+    if(this.hopping){
+      this.t += dt/HOP_DUR;
+      if(this.t>=1){ this.t=1; this._land(); }
+      else { const p=this._ease(this.t); this.x = this.fromX + (this.toX-this.fromX)*p; }
+    } else {
+      this.idlePhase += dt;
+      // riding a log carries the chicken
+      if(this.ridingLog){
+        this.x = this.ridingLog.x + this.rideOffset;
+        if(this.x < 6 || this.x > WORLD_W-6){ this.game.killPlayer('river-edge'); }
+      }
+    }
+  }
+  die(kind){
+    if(this.dead) return;
+    this.dead = true; this.deathKind = kind; this.deathT = 0;
+    this.deathX = this.x;
+    this.deathY = this.game.camera.tileTop(this.row) + TILE/2;
+  }
+  render(ctx, cam){
+    if(this.dead && this.deathKind==='water'){
+      // sinking shrink over 150ms then gone
+      const k = Math.max(0, 1 - this.deathT/0.15);
+      if(k<=0) return;
+      this._drawBody(ctx, cam, 1, k, 0, 0, false);
+      return;
+    }
+    if(this.dead && (this.deathKind==='car'||this.deathKind==='train')){
+      if(this.deathT < 0.08){ this._drawBody(ctx, cam, 1.4, 0.4, 0, 0, false); }
+      return; // then hidden; feathers carry the beat
+    }
+    if(this.dead) return; // eagle handled elsewhere
+
+    // alive: idle or hop
+    let sx=1, sy=1, lift=0, wing=false, headDy=0;
+    if(this.hopping){
+      const p = this.t;
+      if(p<0.2){ sy=0.85; sx=1.15; wing=true; }
+      else if(p<0.8){ sy=1.15; sx=0.9; wing=true; }
+      else { sy=0.8; sx=1.2; }
+      lift = Math.sin(Math.PI*this._ease(p)) * HOP_LIFT;
+    } else {
+      const f = Math.floor((this.idlePhase*1000/180)) % 4; // 4 frames @180ms
+      headDy = [0,1,2,1][f];
+      if(this.ridingLog) lift = -1; // slight dip aboard log
+    }
+    this._drawBody(ctx, cam, sx, sy, lift, headDy, wing);
+  }
+  _drawBody(ctx, cam, sx, sy, lift, headDy, wing){
+    const vr = this.visualRow();
+    const feetY = cam.tileTop(vr) + TILE - 4 - lift;
+    const SCALE = 3;
+    // shadow
+    ctx.globalAlpha = 0.22; ctx.fillStyle = '#000';
+    ctx.fillRect(this.x-15, feetY-2, 30, 6); ctx.globalAlpha = 1;
+    ctx.save();
+    ctx.translate(this.x, feetY);
+    ctx.scale(SCALE*sx*this.facing, SCALE*sy);
+    ctx.translate(-8, -16);
+    drawChickenSprite(ctx, headDy, wing);
+    ctx.restore();
+  }
+}
+
+/* =====================================================================
+   MAIN GAME  (chunk 1 scaffold — expanded in later chunks)
+   ===================================================================== */
+class Game {
+  constructor(canvas){
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.audio = new AudioManager();
+    this.state = S.TITLE;
+    this.time = 0;
+    this.scale = 1;
+    this.highScore = 0;
+    this.camera = new Camera();
+    this.particles = new ParticleSystem();
+    this.player = null;
+    this.lanes = [];
+    this.stage = 0;
+    this.stageBase = 0;
+    this.furthest = 0;
+    this.corn = 0;
+    this.titleChicken = { idlePhase: 0 };
+    this._resize();
+    window.addEventListener('resize', ()=>this._resize());
+    window.addEventListener('orientationchange', ()=>this._resize());
+    this.input_ = new InputManager(canvas, this);
+    this._last = performance.now();
+    requestAnimationFrame((t)=>this._loop(t));
+  }
+
+  /* scale-to-fit + letterbox + devicePixelRatio crisp (PRD §4) */
+  _resize(){
+    const dpr = Math.max(1, Math.min(3, window.devicePixelRatio||1));
+    const availW = window.innerWidth, availH = window.innerHeight;
+    let scale = Math.min(availW/VW, availH/VH);
+    scale = Math.max(0.1, scale);
+    this.scale = scale;
+    this.canvas.style.width  = Math.round(VW*scale) + 'px';
+    this.canvas.style.height = Math.round(VH*scale) + 'px';
+    this.canvas.width  = Math.round(VW*scale*dpr);
+    this.canvas.height = Math.round(VH*scale*dpr);
+    this._renderScale = scale*dpr;
+    this.ctx.imageSmoothingEnabled = false;
+  }
+
+  onFirstInput(){ this.audio.unlock(); }
+  toggleMute(){ return this.audio.toggleMute(); }
+  /* convert client px → virtual coords and test the mute button */
+  hitMute(clientX, clientY){
+    const r = this.canvas.getBoundingClientRect();
+    if(r.width===0) return false;
+    const vx = (clientX - r.left)/r.width * VW;
+    const vy = (clientY - r.top)/r.height * VH;
+    const m = this._muteRect();
+    if(vx>=m.x && vx<=m.x+m.w && vy>=m.y && vy<=m.y+m.h){ this.audio.unlock(); this.toggleMute(); return true; }
+    return false;
+  }
+
+  /* central input router (expanded per state in later chunks) */
+  input(dir){
+    if(this.state===S.TITLE){
+      if(dir==='confirm'||dir==='tap'||dir==='up') this.startRun();
+      return;
+    }
+    if(this.state===S.GAME_OVER || this.state===S.VICTORY){
+      if(dir==='confirm'||dir==='tap'||dir==='up') this.startRun();
+      return;
+    }
+    if(this.state===S.PLAYING){
+      // movement handled in chunk 2 (Player)
+      if(this.player && (dir==='up'||dir==='down'||dir==='left'||dir==='right'))
+        this.player.tryHop(dir);
+      else if(this.player && dir==='tap')
+        this.player.tryHop('up');
+    }
+  }
+
+  /* ---- run lifecycle (lane generation temporary; real gen in chunk 3) ---- */
+  startRun(){
+    this.stage = 0; this.stageBase = 0; this.corn = 0; this.score = 0;
+    this._deathCause = null;
+    this._startStage();
+    this.state = S.PLAYING;
+  }
+  stageCfg(){ return STAGES[this.stage]; }
+  _startStage(){
+    this.furthest = 0;
+    this.eagle = null;
+    const cfg = this.stageCfg();
+    this.camera.reset(cfg.scroll);
+    this.particles.clear();
+    this.player = new Player(this);
+    this._genLanes();
+  }
+  _genLanes(){
+    const cfg = this.stageCfg();
+    const w = cfg.weights;
+    this.lanes = [];
+    let lastType='grass', streak=0;
+    for(let r=0;r<=STAGE_ROWS+4;r++){
+      let type;
+      if(r<3 || r>=STAGE_ROWS) type='grass';          // safe start + clear pad
+      else {
+        type = this._pickType(w);
+        if(type===lastType){ streak++; if(streak>=2 && type!=='grass'){ type='grass'; } }
+      }
+      if(type===lastType) streak++; else { streak=0; lastType=type; }
+      const lane = new Lane(this, r, type);
+      if(type==='grass' && r>=3 && r<STAGE_ROWS){
+        this._addObstacles(lane);
+      }
+      this._maybeCorn(lane);
+      this._populateHazards(lane, cfg);   // vehicles/logs/train (chunk 4)
+      this.lanes.push(lane);
+    }
+  }
+  _pickType(w){
+    const roll=Math.random(); let acc=0;
+    for(const k of ['grass','road','river','rail']){ acc+=w[k]||0; if(roll<acc) return k; }
+    return 'grass';
+  }
+  _addObstacles(lane){
+    const n = Math.random()<0.5 ? (Math.random()<0.5?1:2) : 0;
+    const used = new Set();
+    for(let i=0;i<n;i++){
+      const col = Math.random()*COLS|0;
+      if(used.has(col)) continue; used.add(col);
+      lane.obstacles.push({ col, type: Math.random()<0.5?'tree':'rock' });
+    }
+  }
+  _maybeCorn(lane){
+    if(lane.type==='river') return;              // corn needs solid footing
+    if(Math.random()>0.22) return;
+    let col; let tries=0;
+    do { col=Math.random()*COLS|0; tries++; } while(lane.blocks(col) && tries<8);
+    if(!lane.blocks(col)) lane.corn = { col, phase:Math.random(), collected:false };
+  }
+  _populateHazards(lane, cfg){
+    const c = cfg.col;
+    if(lane.type==='road'){
+      const dir = Math.random()<0.5?1:-1;
+      const [lo,hi] = cfg.vehPerLane;
+      const n = lo + (Math.random()*(hi-lo+1)|0);
+      const speed = cfg.vMin + Math.random()*(cfg.vMax-cfg.vMin);
+      const spacing = WORLD_W/n;
+      for(let i=0;i<n;i++){
+        let kind='car', w=44;
+        const r=Math.random();
+        if(this.stage===1 && r<0.25){ kind='bus'; w=96; }
+        else if(r<0.45){ kind='truck'; w=74; }
+        const carColor = c.cars[(i + (Math.random()*c.cars.length|0)) % c.cars.length];
+        const vcol = { body:carColor, win:c.carWin, glow:c.headlight, tail:c.taillight||null };
+        lane.vehicles.push(new Vehicle(i*spacing + Math.random()*10, speed, dir, kind, w, vcol));
+      }
+    } else if(lane.type==='river'){
+      const dir = Math.random()<0.5?1:-1;
+      const speed = cfg.logMin + Math.random()*(cfg.logMax-cfg.logMin);
+      const n = 2 + (Math.random()<0.5?1:0);
+      const spacing = WORLD_W/n;
+      for(let i=0;i<n;i++){
+        const isPad = Math.random()<0.25;
+        const w = isPad ? 40 : (Math.random()<0.5?96:72);
+        lane.logs.push(new Log(i*spacing + Math.random()*20, speed, dir, w, c, isPad));
+      }
+    } else if(lane.type==='rail'){
+      const t = new Train(cfg, c); t.game = this; lane.train = t;
+    }
+  }
+  laneAt(row){ return this.lanes[row] || null; }
+  /* QA hook helper (BUG-5): after a hops= teleport, neutralize whatever hazard
+     is currently occupying the landing tile so the dev jump is reliably safe
+     rather than a coin-flip into instant death. */
+  _ensureSafeLanding(){
+    const p = this.player; if(!p) return;
+    const lane = this.laneAt(p.row); if(!lane) return;
+    if(lane.type==='road'){
+      // clear the whole lane rather than just the overlapping vehicle — a
+      // "near miss" vehicle at teleport time can still close the gap and
+      // kill the player a few frames later since they're standing still.
+      lane.vehicles = [];
+    } else if(lane.type==='rail'){
+      if(lane.train){ lane.train.state='idle'; lane.train.timer = 2+Math.random()*4; }
+    } else if(lane.type==='river'){
+      let ride=null;
+      for(const l of lane.logs){ if(l.carries(p.x)){ ride=l; break; } }
+      if(!ride && lane.logs.length){
+        // pick whichever log has the most room before it would carry the
+        // player off either edge (WORLD_W-6 kill threshold in Player.update),
+        // not just the first log, so we don't hand the player a log that's
+        // about to sweep them away within a frame or two.
+        ride = lane.logs.reduce((best, l) => {
+          const margin = Math.min(l.x - 6, WORLD_W - 6 - l.x);
+          const bestMargin = best ? Math.min(best.x - 6, WORLD_W - 6 - best.x) : -Infinity;
+          return margin > bestMargin ? l : best;
+        }, null);
+        p.x = ride.x;
+      }
+      if(ride){ p.ridingLog = ride; p.rideOffset = p.x - ride.x; }
+    }
+  }
+  dustTint(){
+    const l = this.player && this.laneAt(this.player.row);
+    if(!l) return '#C9BFA6';
+    if(l.type==='road'||l.type==='rail') return '#8A8A94';
+    return '#C9BFA6';
+  }
+  onPlayerLanded(){
+    const p = this.player;
+    if(p.row > this.furthest){ this.furthest = p.row; }
+    this.score = this.stageBase + this.furthest + this.corn*3;
+    const lane = this.laneAt(p.row);
+    if(!lane){ return; }
+    // resolve landing per lane type
+    if(lane.type==='river'){
+      let ride=null;
+      for(const l of lane.logs){ if(l.carries(p.x)){ ride=l; break; } }
+      if(ride){ p.ridingLog=ride; p.rideOffset = p.x - ride.x; }
+      else { this.killPlayer('water'); return; }
+    } else if(lane.type==='road'){
+      for(const v of lane.vehicles){ if(v.hits(p.x)){ this.killPlayer('car'); return; } }
+    } else if(lane.type==='rail'){
+      if(lane.train && lane.train.hits(p.x)){ this.killPlayer('train'); return; }
+    }
+    this._collectCorn(lane);
+    if(p.row >= STAGE_ROWS){ this._onStageReached(); }
+  }
+  _onStageReached(){
+    if(this.state!==S.PLAYING) return;
+    if(this.stage>=STAGES.length-1){
+      // final stage cleared → victory
+      this.stageBase += STAGE_ROWS;
+      this.score = this.stageBase + this.corn*3;
+      this.audio.clear();
+      if(this.score>this.highScore){ this.highScore=this.score; this.newBest=true; } else this.newBest=false;
+      this.state = S.VICTORY;
+      this._confetti = [];
+    } else {
+      this.state = S.STAGE_CLEAR;
+      this._clearT = 0;
+      this._clearSnapStage = this.stage;
+      this.audio.clear();
+    }
+  }
+  _advanceStage(){
+    this.stageBase += STAGE_ROWS;                 // cumulative rows carry over
+    this.stage++;
+    this._startStage();
+    this.score = this.stageBase + this.corn*3;
+    this._stageFlash = 0.4;
+    this.state = S.PLAYING;
+  }
+  _collectCorn(lane){
+    if(lane && lane.corn && !lane.corn.collected && colOf(this.player.x)===lane.corn.col){
+      lane.corn.collected = true; this.corn++;
+      this.score = this.stageBase + this.furthest + this.corn*3;
+      const top = this.camera.tileTop(lane.row);
+      this.particles.sparkle(colCenterX(lane.corn.col), top+TILE/2);
+      this.audio.corn();
+      this._cornPulse = 0.15;
+    }
+  }
+  /* per-frame hazard check while the chicken is grounded (PRD §7.3) */
+  resolveGrounded(){
+    const p=this.player; if(!p || p.dead || p.hopping) return;
+    const lane=this.laneAt(p.row); if(!lane) return;
+    if(lane.type==='road'){
+      let near=999;
+      for(const v of lane.vehicles){ if(v.hits(p.x)){ this.killPlayer('car'); return; } near=Math.min(near,Math.abs(v.x-p.x)); }
+      if(near<60 && (this._hornCd||0)<=0){ this.audio.horn(); this._hornCd=1.4; } // near-miss honk
+    } else if(lane.type==='rail'){
+      if(lane.train && lane.train.hits(p.x)){ this.killPlayer('train'); return; }
+    } else if(lane.type==='river'){
+      if(!p.ridingLog){ this.killPlayer('water'); return; }
+    }
+    this._collectCorn(lane);
+  }
+  killPlayer(cause){
+    if(!this.player || this.player.dead) return;
+    const water = (cause==='water'||cause==='river-edge');
+    this.player.die(water ? 'water' : cause);
+    this._deathCause = cause;
+    const px = this.player.x;
+    const py = this.camera.tileTop(this.player.row) + TILE/2;
+    const cfg = this.stageCfg().col;
+    if(water){
+      this.particles.splash(px, py, cfg.foam, cfg.river);
+      this.audio.splash();
+    } else {
+      this.particles.feathers(px, py);
+      this.camera.shake(9);                 // hard-impact shake (DESIGN §5.5)
+      this.audio.death();
+    }
+    this._flash = 0.15;                       // slow-mo white flash (DESIGN §5.6)
+    this.state = S.DYING;
+    this._dyingT = 0;
+  }
+  gameOver(cause){
+    this._deathCause = cause || this._deathCause;
+    if(this.score > this.highScore){ this.highScore = this.score; this.newBest = true; }
+    else this.newBest = false;
+    this.audio.gameover();
+    this.state = S.GAME_OVER;
+  }
+  get score(){ return this._score||0; }
+  set score(v){ this._score = v; }
+
+  _loop(now){
+    let dt = (now - this._last)/1000;
+    this._last = now;
+    if(dt>0.05) dt = 0.05;          // clamp (tab switch / hitches)
+    this.time += dt;                // real-time clock (UI blink, ambient)
+    // slow-motion on death (DESIGN §5.6): scale gameplay dt, ramp back to 1x
+    let ts = 1;
+    if(this.state===S.DYING){
+      const k = Math.min(1, (this._dyingT||0)/0.25);
+      ts = 0.3 + 0.7*k;             // 0.3x → 1x over 250ms
+    }
+    if(this._flash>0) this._flash -= dt;
+    this.update(dt*ts);
+    this.render();
+    requestAnimationFrame((t)=>this._loop(t));
+  }
+
+  update(dt){
+    if(this.state===S.TITLE){
+      this.titleChicken.idlePhase += dt;
+      return;
+    }
+    if(this.state===S.PLAYING){
+      this.player.update(dt);
+      for(const lane of this.lanes) lane.update(dt);
+      this.resolveGrounded();
+      this.camera.update(dt, this.player, true);
+      this.particles.update(dt);
+      if(this._cornPulse>0) this._cornPulse-=dt;
+      if(this._hornCd>0) this._hornCd-=dt;
+      this._checkFallBehind();
+    } else if(this.state===S.DYING){
+      this._dyingT = (this._dyingT||0) + dt;
+      this.player.update(dt);
+      for(const lane of this.lanes) lane.update(dt);
+      this.camera.update(dt, this.player, false);
+      this.particles.update(dt);
+      if(this._dyingT>0.65) this.gameOver();
+    } else if(this.state===S.EAGLE){
+      for(const lane of this.lanes) lane.update(dt);
+      this.particles.update(dt);
+      this.eagle.update(dt);
+      if(this.eagle.done) this.gameOver('eagle');
+    } else if(this.state===S.STAGE_CLEAR){
+      this._clearT += dt;
+      for(const lane of this.lanes) lane.update(dt);   // world keeps living behind scrim
+      if(this._clearT > 1.9) this._advanceStage();
+    } else if(this.state===S.VICTORY){
+      this._updateConfetti(dt);
+    }
+    if(this._stageFlash>0) this._stageFlash -= dt;
+  }
+  _updateConfetti(dt){
+    if(!this._confetti) this._confetti=[];
+    if(this._confetti.length<50 && Math.random()<0.5){
+      const cols=['#DC2626','#2563EB','#22C55E','#FFD23F'];
+      this._confetti.push({x:Math.random()*VW, y:-8, vy:40+Math.random()*60,
+        vx:(Math.random()-0.5)*20, s:4+(Math.random()*3|0), c:cols[Math.random()*4|0], r:Math.random()*6});
+    }
+    for(let i=this._confetti.length-1;i>=0;i--){
+      const p=this._confetti[i]; p.y+=p.vy*dt; p.x+=p.vx*dt; p.r+=dt*3;
+      if(p.y>VH+10) this._confetti.splice(i,1);
+    }
+  }
+  _checkFallBehind(){
+    if(!this.player || this.player.dead) return;
+    const top = this.camera.tileTop(this.player.row);
+    if(top > VH){                 // chicken dropped below the visible window
+      this.state = S.EAGLE;
+      this.player.dead = true; this.player.deathKind = 'eagle';
+      this.eagle = new Eagle(this);
+      this.audio.death();
+    }
+  }
+
+  render(){
+    const ctx = this.ctx;
+    ctx.setTransform(this._renderScale,0,0,this._renderScale,0,0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = '#0B0E1A';
+    ctx.fillRect(0,0,VW,VH);
+
+    if(this.state===S.TITLE){
+      this._renderTitle(ctx);
+    } else {
+      this._renderWorld(ctx);
+      if(this.state===S.EAGLE && this.eagle) this.eagle.render(ctx);
+      if(this._flash>0){
+        ctx.fillStyle='rgba(255,255,255,'+(Math.max(0,this._flash/0.15)*0.6)+')';
+        ctx.fillRect(0,0,VW,VH);
+      }
+      this._renderHUD(ctx);
+      if(this.state===S.STAGE_CLEAR) this._renderStageClear(ctx);
+      else if(this.state===S.VICTORY) this._renderVictory(ctx);
+      else if(this.state===S.GAME_OVER) this._renderGameOver(ctx);
+    }
+  }
+
+  /* shared pixel-notch panel (DESIGN §1.3 / handoff note 5) */
+  _panel(ctx, x, y, w, h, fill){
+    const n=8;
+    ctx.fillStyle='rgba(0,0,0,0.6)'; // hard offset shadow
+    this._notchPath(ctx, x+4, y+4, w, h, n); ctx.fill();
+    ctx.fillStyle=fill||'#192134';
+    this._notchPath(ctx, x, y, w, h, n); ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,0.10)'; ctx.lineWidth=2;
+    this._notchPath(ctx, x, y, w, h, n); ctx.stroke();
+  }
+  _notchPath(ctx,x,y,w,h,n){
+    ctx.beginPath();
+    ctx.moveTo(x+n,y); ctx.lineTo(x+w-n,y); ctx.lineTo(x+w,y+n);
+    ctx.lineTo(x+w,y+h-n); ctx.lineTo(x+w-n,y+h); ctx.lineTo(x+n,y+h);
+    ctx.lineTo(x,y+h-n); ctx.lineTo(x,y+n); ctx.closePath();
+  }
+
+  _renderStageClear(ctx){
+    ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(0,0,VW,VH);
+    const pw=252, ph=170, px=(VW-pw)/2, py=(VH-ph)/2;
+    this._panel(ctx,px,py,pw,ph);
+    drawText(ctx,'STAGE '+(this._clearSnapStage+1)+' CLEAR!',VW/2,py+26,2,'#22C55E','center',2);
+    drawText(ctx,'SCORE',px+28,py+72,2,'#FFFFFF','left',1);
+    drawText(ctx,String(this.score),px+pw-28,py+72,2,'#FFFFFF','right',1);
+    drawText(ctx,'CORN',px+28,py+98,2,'#FFFFFF','left',1);
+    drawText(ctx,String(this.corn),px+pw-28,py+98,2,'#FFD23F','right',1);
+    // progress bar
+    const bw=pw-56, bx=px+28, by=py+128;
+    ctx.fillStyle='rgba(255,255,255,0.12)'; ctx.fillRect(bx,by,bw,6);
+    ctx.fillStyle='#22C55E'; ctx.fillRect(bx,by,bw*Math.min(1,this._clearT/1.9),6);
+    drawText(ctx,'GET READY...',VW/2,py+142,1,'#94A3B8','center',2);
+  }
+
+  _renderVictory(ctx){
+    ctx.fillStyle='rgba(255,210,63,0.16)'; ctx.fillRect(0,0,VW,VH);
+    ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(0,0,VW,VH);
+    if(this._confetti) for(const p of this._confetti){
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.r);
+      ctx.fillStyle=p.c; ctx.fillRect(-p.s/2,-p.s/2,p.s,p.s); ctx.restore();
+    }
+    const pw=252, ph=180, px=(VW-pw)/2, py=(VH-ph)/2;
+    this._panel(ctx,px,py,pw,ph);
+    drawText(ctx,'VICTORY!',VW/2,py+26,3,'#FFD23F','center',2);
+    drawText(ctx,'SCORE',px+28,py+80,2,'#FFFFFF','left',1);
+    drawText(ctx,String(this.score),px+pw-28,py+80,2,'#FFFFFF','right',1);
+    drawText(ctx,'CORN',px+28,py+104,2,'#FFFFFF','left',1);
+    drawText(ctx,String(this.corn),px+pw-28,py+104,2,'#FFD23F','right',1);
+    drawText(ctx,'BEST',px+28,py+128,2,'#FFFFFF','left',1);
+    drawText(ctx,String(this.highScore),px+pw-28,py+128,2,'#FFD23F','right',1);
+    if(this.newBest && (Math.floor(this.time*3)%2===0))
+      drawText(ctx,'NEW BEST!',VW/2,py+148,1,'#FFD23F','center',2);
+    if((Math.floor(this.time*2)%2)===0)
+      drawText(ctx,'SPACE / TAP TO PLAY AGAIN',VW/2,py+ph-14,1,'#FFFFFF','center',2);
+  }
+
+  /* ---- world: parallax sky + lanes + entities + player + particles ---- */
+  _renderWorld(ctx){
+    const cam = this.camera; const cfg = this.stageCfg(); const c = cfg.col;
+    ctx.save();
+    ctx.translate(cam.shakeX, cam.shakeY);
+    this._renderParallax(ctx, cfg);
+    const r0 = Math.floor(cam.y) - 2;
+    const r1 = Math.ceil(cam.y) + Math.ceil(VH/TILE) + 3;
+    // ground bases far→near (higher rows first so canopies overlap correctly)
+    for(let r=r1;r>=r0;r--){
+      const lane = this.laneAt(r); if(!lane) continue;
+      const top = cam.tileTop(r);
+      if(top>VH+40 || top+TILE<-40) continue;
+      lane.renderBase(ctx, top);
+      // depth seam
+      ctx.fillStyle='rgba(0,0,0,0.12)'; ctx.fillRect(0, top+TILE-2, VW, 2);
+    }
+    // entities (vehicles/logs/trains) drawn in chunk 4 via lane.renderProps
+    for(let r=r1;r>=r0;r--){
+      const lane=this.laneAt(r); if(!lane || !lane.renderProps) continue;
+      const top=cam.tileTop(r);
+      if(top>VH+40 || top+TILE<-40) continue;
+      lane.renderProps(ctx, top);
+    }
+    if(this.player) this.player.render(ctx, cam);
+    this.particles.render(ctx);
+    ctx.restore();
+  }
+
+  _renderParallax(ctx, cfg){
+    const c=cfg.col, cam=this.camera;
+    const g = ctx.createLinearGradient(0,0,0,VH);
+    g.addColorStop(0,c.skyTop); g.addColorStop(1,c.skyBottom);
+    ctx.fillStyle=g; ctx.fillRect(0,0,VW,VH);
+    const far = -(cam.y*TILE*0.12)%160;
+    const near = -(cam.y*TILE*0.28)%120;
+    if(this.stage===0){
+      ctx.fillStyle=c.sun; ctx.beginPath(); ctx.arc(266,64,20,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle=c.hillFar;
+      for(let i=-1;i<4;i++){ const x=i*140+far; ctx.beginPath(); ctx.arc(x+70,150,80,Math.PI,0); ctx.fill(); }
+      ctx.fillStyle=c.hillNear;
+      for(let i=-1;i<4;i++){ const x=i*120+near; ctx.beginPath(); ctx.arc(x+60,180,70,Math.PI,0); ctx.fill(); }
+    } else if(this.stage===1){
+      ctx.fillStyle=c.star;
+      for(let i=0;i<28;i++){ ctx.fillRect((i*47)%VW,(i*29)%150,1,1); }
+      ctx.fillStyle=c.skyline;
+      for(let i=-1;i<6;i++){ const x=i*70+far; ctx.fillRect(x,110,50,90); }
+      ctx.fillStyle=c.building;
+      for(let i=-1;i<7;i++){ const x=i*56+near; ctx.fillRect(x,150,44,90);
+        ctx.fillStyle=c.windowLit;
+        for(let wy=158; wy<236; wy+=14) for(let wx=x+6; wx<x+40; wx+=12){ if((wx*wy)%7<3) ctx.fillRect(wx,wy,5,6); }
+        ctx.fillStyle=c.building;
+      }
+    } else {
+      ctx.fillStyle=c.smokestack;
+      for(let i=-1;i<4;i++){ const x=i*130+far; ctx.fillRect(x+30,70,18,130); ctx.fillRect(x+90,50,22,150); }
+      ctx.fillStyle=c.ember; ctx.globalAlpha=0.6;
+      for(let i=0;i<10;i++){ const ey=(200-(this.time*30+i*40)%200); ctx.fillRect((i*57)%VW, ey, 2,2); }
+      ctx.globalAlpha=1;
+    }
+  }
+
+  _renderHUD(ctx){
+    ctx.fillStyle = 'rgba(15,23,42,0.82)';
+    ctx.fillRect(0,0,VW,HUD_H);
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.fillRect(0,HUD_H-1,VW,1);
+    // left: SCORE
+    drawText(ctx,'SCORE',12,8,1,'#94A3B8','left',1);
+    drawText(ctx,String(this.score),12,20,2,'#FFFFFF','left',1);
+    // center: stage badge (flashes accent on transition)
+    const badge = (this._stageFlash>0 && Math.floor(this.time*20)%2===0) ? '#22C55E' : '#2563EB';
+    const bw=textWidth('STAGE '+(this.stage+1)+'/3',1)+16;
+    ctx.fillStyle=badge; ctx.fillRect(VW/2-bw/2, 12, bw, 20);
+    drawText(ctx,'STAGE '+(this.stage+1)+'/3',VW/2,18,1,'#FFFFFF','center',1);
+    // right: corn (pulses on collect) + mute
+    const pulse = this._cornPulse>0;
+    const cornCol = pulse ? '#FFFFFF' : '#FFD23F';
+    const cx = VW-64;
+    // corn icon
+    ctx.fillStyle='#7ABF4C'; ctx.fillRect(cx-2, 18, 8, 6);
+    ctx.fillStyle='#FFD23F'; ctx.fillRect(cx-1, 12, 3, 3); ctx.fillRect(cx+2, 12, 3, 3);
+    drawText(ctx,String(this.corn),cx+12,18,2,cornCol,'left',1);
+    this._drawMute(ctx);
+  }
+  _drawMute(ctx){
+    const s=this._muteRect(); const m=this.audio.muted;
+    ctx.fillStyle='rgba(255,255,255,0.06)'; ctx.fillRect(s.x,s.y,s.w,s.h);
+    ctx.strokeStyle='rgba(255,255,255,0.10)'; ctx.lineWidth=1; ctx.strokeRect(s.x+0.5,s.y+0.5,s.w-1,s.h-1);
+    const bx=s.x+14, by=s.y+16;
+    ctx.fillStyle=m?'#94A3B8':'#2563EB';
+    ctx.fillRect(bx,by,4,8); ctx.beginPath();
+    ctx.moveTo(bx+4,by-3); ctx.lineTo(bx+12,by-8); ctx.lineTo(bx+12,by+16); ctx.lineTo(bx+4,by+11); ctx.closePath(); ctx.fill();
+    if(m){ ctx.strokeStyle='#DC2626'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(bx+15,by-4); ctx.lineTo(bx+24,by+13); ctx.stroke(); }
+    else { ctx.strokeStyle='#2563EB'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(bx+14,by+4,5,-0.7,0.7); ctx.stroke(); ctx.beginPath(); ctx.arc(bx+14,by+4,9,-0.7,0.7); ctx.stroke(); }
+  }
+  _muteRect(){ return { x:VW-46, y:2, w:44, h:44 }; }
+
+  _renderGameOver(ctx){
+    // red-tinted danger scrim (DESIGN §7.4)
+    ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(0,0,VW,VH);
+    ctx.fillStyle='rgba(220,38,38,0.28)'; ctx.fillRect(0,0,VW,VH);
+    const pw=252, ph=196, px=(VW-pw)/2, py=(VH-ph)/2;
+    this._panel(ctx,px,py,pw,ph);
+    drawText(ctx,'GAME OVER',VW/2,py+24,3,'#DC2626','center',2);
+    const causes={ car:'SQUASHED!', train:'STRUCK BY TRAIN!', water:'SWEPT AWAY!',
+      'river-edge':'SWEPT AWAY!', eagle:'SNATCHED BY AN EAGLE!' };
+    drawText(ctx, causes[this._deathCause]||'GAME OVER', VW/2, py+56, 1, '#94A3B8','center',2);
+    drawText(ctx,'SCORE',px+28,py+82,2,'#FFFFFF','left',1);
+    drawText(ctx,String(this.score),px+pw-28,py+82,2,'#FFFFFF','right',1);
+    drawText(ctx,'CORN',px+28,py+106,2,'#FFFFFF','left',1);
+    drawText(ctx,String(this.corn),px+pw-28,py+106,2,'#FFD23F','right',1);
+    drawText(ctx,'BEST',px+28,py+130,2,'#FFFFFF','left',1);
+    drawText(ctx,String(this.highScore),px+pw-28,py+130,2,'#FFD23F','right',1);
+    if(this.newBest && (Math.floor(this.time*3)%2===0))
+      drawText(ctx,'NEW BEST!',VW/2,py+152,1,'#FFD23F','center',2);
+    if((Math.floor(this.time*2)%2)===0)
+      drawText(ctx,'SPACE / TAP TO RESTART',VW/2,py+ph-16,1,'#FFFFFF','center',2);
+  }
+
+  _renderTitle(ctx){
+    // Stage-1 backdrop establishes tone immediately (DESIGN §7.1)
+    const g = ctx.createLinearGradient(0,0,0,VH);
+    g.addColorStop(0,'#8FD3F4'); g.addColorStop(1,'#C9F2C0');
+    ctx.fillStyle = g; ctx.fillRect(0,0,VW,VH);
+    // rolling hills
+    ctx.fillStyle='#FFE066'; ctx.beginPath(); ctx.arc(268,70,22,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#A6DE7A'; for(let i=-1;i<4;i++){ ctx.beginPath(); ctx.arc(i*140+70,300,90,Math.PI,0); ctx.fill(); }
+    ctx.fillStyle='#7FC24C'; for(let i=-1;i<4;i++){ ctx.beginPath(); ctx.arc(i*120+60,340,80,Math.PI,0); ctx.fill(); }
+    ctx.fillStyle='#6ABE30'; ctx.fillRect(0,330,VW,VH-330);
+    // title
+    drawText(ctx, 'CHICKEN', VW/2, 96, 4, '#FFFFFF', 'center', 2);
+    drawText(ctx, 'ROAD',    VW/2, 150, 4, '#DC2626', 'center', 2);
+    // idle-animated hero chicken (4x)
+    const f = Math.floor((this.titleChicken.idlePhase*1000/180)) % 4;
+    const headDy = [0,1,2,1][f];
+    ctx.save();
+    ctx.translate(VW/2, 300);
+    ctx.scale(4,4); ctx.translate(-8,-16);
+    drawChickenSprite(ctx, headDy, false);
+    ctx.restore();
+    const blink = (Math.floor(this.time*2)%2)===0;
+    if(blink){
+      drawText(ctx, 'PRESS SPACE TO START', VW/2, 380, 1, '#0F172A', 'center', 0);
+      drawText(ctx, 'TAP TO START', VW/2, 400, 1, '#0F172A', 'center', 0);
+    }
+    if(this.highScore>0) drawText(ctx,'BEST: '+this.highScore, VW/2, 430, 1, '#B8860B','center',0);
+    // mute control visible on title too
+    this._drawMute(ctx);
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Boot
+   --------------------------------------------------------------------- */
+window.addEventListener('load', ()=>{
+  const canvas = document.getElementById('game');
+  const game = new Game(canvas);
+  window.__game = game;
+  // dev aid (also handy for QA): file://.../index.html?autostart=1&stage=2
+  const q = new URLSearchParams(location.search);
+  if(q.get('autostart')){
+    // BUG-3 fix: guard against non-numeric/garbage params (e.g. ?stage=abc) —
+    // parseInt('abc') -> NaN would otherwise propagate into STAGES[NaN] and crash.
+    const rawStage = parseInt(q.get('stage'), 10);
+    game.stage = Number.isFinite(rawStage) ? Math.max(0, Math.min(2, rawStage)) : 0;
+    game.stageBase = game.stage*STAGE_ROWS;
+    game._startStage();
+    game.state = S.PLAYING;
+    const rawHops = parseInt(q.get('hops'), 10);
+    const hops = Number.isFinite(rawHops) ? Math.max(0, rawHops) : 0;
+    for(let i=0;i<hops;i++){ if(game.player) { game.player.row++; game.player.x = colCenterX(3); } }
+    if(game.player){
+      game.furthest = game.player.row; game.camera.y = game.player.row - LEAD; game.camera.minY = game.camera.y;
+      game._ensureSafeLanding(); // BUG-5 fix: neutralize whatever hazard occupies the landing tile
+    }
+    const scr = q.get('screen');
+    if(scr){
+      game.score=87; game.corn=11; game.highScore=87; game.newBest=true;
+      if(scr==='clear'){ game._clearT=0.6; game._clearSnapStage=0; game.state=S.STAGE_CLEAR; }
+      else if(scr==='victory'){ game._confetti=[]; game.state=S.VICTORY; }
+      else if(scr==='over'){ game._deathCause='train'; game.state=S.GAME_OVER; }
+    }
+  }
+});
+</script>
+</body>
+</html>
