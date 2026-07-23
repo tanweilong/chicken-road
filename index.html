@@ -999,7 +999,8 @@ class Game {
 
   /* ---- run lifecycle (lane generation temporary; real gen in chunk 3) ---- */
   startRun(){
-    this.stage = 0; this.stageBase = 0; this.corn = 0;
+    this.stage = 0; this.stageBase = 0; this.corn = 0; this.score = 0;
+    this._deathCause = null;
     this._startStage();
     this.state = S.PLAYING;
   }
