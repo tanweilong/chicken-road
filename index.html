@@ -1098,7 +1098,32 @@ class Game {
       if(lane.train && lane.train.hits(p.x)){ this.killPlayer('train'); return; }
     }
     this._collectCorn(lane);
-    if(p.row >= STAGE_ROWS){ /* stage clear — wired in chunk 6 */ }
+    if(p.row >= STAGE_ROWS){ this._onStageReached(); }
+  }
+  _onStageReached(){
+    if(this.state!==S.PLAYING) return;
+    if(this.stage>=STAGES.length-1){
+      // final stage cleared → victory
+      this.stageBase += STAGE_ROWS;
+      this.score = this.stageBase + this.corn*3;
+      this.audio.clear();
+      if(this.score>this.highScore){ this.highScore=this.score; this.newBest=true; } else this.newBest=false;
+      this.state = S.VICTORY;
+      this._confetti = [];
+    } else {
+      this.state = S.STAGE_CLEAR;
+      this._clearT = 0;
+      this._clearSnapStage = this.stage;
+      this.audio.clear();
+    }
+  }
+  _advanceStage(){
+    this.stageBase += STAGE_ROWS;                 // cumulative rows carry over
+    this.stage++;
+    this._startStage();
+    this.score = this.stageBase + this.corn*3;
+    this._stageFlash = 0.4;
+    this.state = S.PLAYING;
   }
   _collectCorn(lane){
     if(lane && lane.corn && !lane.corn.collected && colOf(this.player.x)===lane.corn.col){
@@ -1194,6 +1219,25 @@ class Game {
       this.particles.update(dt);
       this.eagle.update(dt);
       if(this.eagle.done) this.gameOver('eagle');
+    } else if(this.state===S.STAGE_CLEAR){
+      this._clearT += dt;
+      for(const lane of this.lanes) lane.update(dt);   // world keeps living behind scrim
+      if(this._clearT > 1.9) this._advanceStage();
+    } else if(this.state===S.VICTORY){
+      this._updateConfetti(dt);
+    }
+    if(this._stageFlash>0) this._stageFlash -= dt;
+  }
+  _updateConfetti(dt){
+    if(!this._confetti) this._confetti=[];
+    if(this._confetti.length<50 && Math.random()<0.5){
+      const cols=['#DC2626','#2563EB','#22C55E','#FFD23F'];
+      this._confetti.push({x:Math.random()*VW, y:-8, vy:40+Math.random()*60,
+        vx:(Math.random()-0.5)*20, s:4+(Math.random()*3|0), c:cols[Math.random()*4|0], r:Math.random()*6});
+    }
+    for(let i=this._confetti.length-1;i>=0;i--){
+      const p=this._confetti[i]; p.y+=p.vy*dt; p.x+=p.vx*dt; p.r+=dt*3;
+      if(p.y>VH+10) this._confetti.splice(i,1);
     }
   }
   _checkFallBehind(){
@@ -1224,8 +1268,65 @@ class Game {
         ctx.fillRect(0,0,VW,VH);
       }
       this._renderHUD(ctx);
-      if(this.state===S.GAME_OVER) this._renderGameOver(ctx);
+      if(this.state===S.STAGE_CLEAR) this._renderStageClear(ctx);
+      else if(this.state===S.VICTORY) this._renderVictory(ctx);
+      else if(this.state===S.GAME_OVER) this._renderGameOver(ctx);
     }
+  }
+
+  /* shared pixel-notch panel (DESIGN §1.3 / handoff note 5) */
+  _panel(ctx, x, y, w, h, fill){
+    const n=8;
+    ctx.fillStyle='rgba(0,0,0,0.6)'; // hard offset shadow
+    this._notchPath(ctx, x+4, y+4, w, h, n); ctx.fill();
+    ctx.fillStyle=fill||'#192134';
+    this._notchPath(ctx, x, y, w, h, n); ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,0.10)'; ctx.lineWidth=2;
+    this._notchPath(ctx, x, y, w, h, n); ctx.stroke();
+  }
+  _notchPath(ctx,x,y,w,h,n){
+    ctx.beginPath();
+    ctx.moveTo(x+n,y); ctx.lineTo(x+w-n,y); ctx.lineTo(x+w,y+n);
+    ctx.lineTo(x+w,y+h-n); ctx.lineTo(x+w-n,y+h); ctx.lineTo(x+n,y+h);
+    ctx.lineTo(x,y+h-n); ctx.lineTo(x,y+n); ctx.closePath();
+  }
+
+  _renderStageClear(ctx){
+    ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(0,0,VW,VH);
+    const pw=252, ph=170, px=(VW-pw)/2, py=(VH-ph)/2;
+    this._panel(ctx,px,py,pw,ph);
+    drawText(ctx,'STAGE '+(this._clearSnapStage+1)+' CLEAR!',VW/2,py+26,2,'#22C55E','center',2);
+    drawText(ctx,'SCORE',px+28,py+72,2,'#FFFFFF','left',1);
+    drawText(ctx,String(this.score),px+pw-28,py+72,2,'#FFFFFF','right',1);
+    drawText(ctx,'CORN',px+28,py+98,2,'#FFFFFF','left',1);
+    drawText(ctx,String(this.corn),px+pw-28,py+98,2,'#FFD23F','right',1);
+    // progress bar
+    const bw=pw-56, bx=px+28, by=py+128;
+    ctx.fillStyle='rgba(255,255,255,0.12)'; ctx.fillRect(bx,by,bw,6);
+    ctx.fillStyle='#22C55E'; ctx.fillRect(bx,by,bw*Math.min(1,this._clearT/1.9),6);
+    drawText(ctx,'GET READY...',VW/2,py+142,1,'#94A3B8','center',2);
+  }
+
+  _renderVictory(ctx){
+    ctx.fillStyle='rgba(255,210,63,0.16)'; ctx.fillRect(0,0,VW,VH);
+    ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(0,0,VW,VH);
+    if(this._confetti) for(const p of this._confetti){
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.r);
+      ctx.fillStyle=p.c; ctx.fillRect(-p.s/2,-p.s/2,p.s,p.s); ctx.restore();
+    }
+    const pw=252, ph=180, px=(VW-pw)/2, py=(VH-ph)/2;
+    this._panel(ctx,px,py,pw,ph);
+    drawText(ctx,'VICTORY!',VW/2,py+26,3,'#FFD23F','center',2);
+    drawText(ctx,'SCORE',px+28,py+80,2,'#FFFFFF','left',1);
+    drawText(ctx,String(this.score),px+pw-28,py+80,2,'#FFFFFF','right',1);
+    drawText(ctx,'CORN',px+28,py+104,2,'#FFFFFF','left',1);
+    drawText(ctx,String(this.corn),px+pw-28,py+104,2,'#FFD23F','right',1);
+    drawText(ctx,'BEST',px+28,py+128,2,'#FFFFFF','left',1);
+    drawText(ctx,String(this.highScore),px+pw-28,py+128,2,'#FFD23F','right',1);
+    if(this.newBest && (Math.floor(this.time*3)%2===0))
+      drawText(ctx,'NEW BEST!',VW/2,py+148,1,'#FFD23F','center',2);
+    if((Math.floor(this.time*2)%2)===0)
+      drawText(ctx,'SPACE / TAP TO PLAY AGAIN',VW/2,py+ph-14,1,'#FFFFFF','center',2);
   }
 
   /* ---- world: parallax sky + lanes + entities + player + particles ---- */
@@ -1351,6 +1452,13 @@ window.addEventListener('load', ()=>{
     const hops = parseInt(q.get('hops')||'0',10);
     for(let i=0;i<hops;i++){ if(game.player) { game.player.row++; game.player.x = colCenterX(3); } }
     if(game.player){ game.furthest = game.player.row; game.camera.y = game.player.row - LEAD; game.camera.minY = game.camera.y; }
+    const scr = q.get('screen');
+    if(scr){
+      game.score=87; game.corn=11; game.highScore=87; game.newBest=true;
+      if(scr==='clear'){ game._clearT=0.6; game._clearSnapStage=0; game.state=S.STAGE_CLEAR; }
+      else if(scr==='victory'){ game._confetti=[]; game.state=S.VICTORY; }
+      else if(scr==='over'){ game._deathCause='train'; game.state=S.GAME_OVER; }
+    }
   }
 });
 </script>
