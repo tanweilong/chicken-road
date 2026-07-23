@@ -1071,7 +1071,7 @@ class Game {
       for(let i=0;i<n;i++){
         let kind='car', w=44;
         const r=Math.random();
-        if(this.stage>=1 && r<0.25){ kind='bus'; w=96; }
+        if(this.stage===1 && r<0.25){ kind='bus'; w=96; }
         else if(r<0.45){ kind='truck'; w=74; }
         const carColor = c.cars[(i + (Math.random()*c.cars.length|0)) % c.cars.length];
         const vcol = { body:carColor, win:c.carWin, glow:c.headlight, tail:c.taillight||null };
