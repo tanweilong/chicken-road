@@ -48,6 +48,13 @@ const LEAD   = 2;                // rows player stays ahead of anchor
 const HOP_DUR = 0.15;           // seconds per hop
 const HOP_LIFT = 14;            // px arc apex
 const STAGE_ROWS = 30;          // rows per stage before clear
+/* BUG-7 fix (river landing too tight): player always lands snapped to a
+   tile's exact column-center while logs/pads drift continuously, so the
+   "am I on the log?" check needs the same kind of forgiveness margin
+   Vehicle.hits() already applies to the *death* check (w/2 + 12) — matched
+   here (and rounded up slightly, since a missed landing is unforgivingly
+   fatal and should give the player the benefit of the doubt). */
+const LOG_LANDING_MARGIN = 14;
 
 /* Game states */
 const S = { TITLE:'title', PLAYING:'playing', DYING:'dying', EAGLE:'eagle',
@@ -606,7 +613,13 @@ class Log {
     if(this.dir>0 && this.x>WORLD_W+pad) this.x=-pad;
     else if(this.dir<0 && this.x<-pad) this.x=WORLD_W+pad;
   }
-  carries(px){ return Math.abs(px - this.x) < this.w/2; }
+  /* BUG-7 fix: landing/carry check needs the same kind of forgiveness margin
+     Vehicle.hits() already gives the *death* check (w/2 + 12) — otherwise the
+     "safe" check is stricter than the "death" check, which is backwards for
+     player fairness and is nearly impossible to satisfy on narrow lily pads
+     (w=40, narrower than one TILE=48) since the player always lands snapped
+     to a tile's exact column-center, not the log's continuous position. */
+  carries(px){ return Math.abs(px - this.x) < this.w/2 + LOG_LANDING_MARGIN; }
   render(ctx, top){
     const y = top + (TILE-this.h)/2 + Math.sin(this.bob)*1;
     const x=this.x, w=this.w;
