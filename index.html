@@ -1265,8 +1265,15 @@ class Game {
       return;
     }
     if(this.state===S.PLAYING){
-      this.player.update(dt);
+      // BUG-7 fix: lanes (logs/vehicles/train) must advance BEFORE the
+      // player, not after — otherwise a hop that lands this frame (via
+      // player.update -> _land() -> onPlayerLanded()) is checked against
+      // last frame's stale log position instead of the position it will
+      // actually render at this frame, and the continuous log-carry sync
+      // (this.x = ridingLog.x + rideOffset) is permanently one frame behind
+      // the platform it's supposedly glued to.
       for(const lane of this.lanes) lane.update(dt);
+      this.player.update(dt);
       this.resolveGrounded();
       this.camera.update(dt, this.player, true);
       this.particles.update(dt);
