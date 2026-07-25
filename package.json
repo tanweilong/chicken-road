@@ -1,0 +1,16 @@
+{
+  "name": "chicken-road",
+  "version": "1.0.0",
+  "description": "A polished chicken-crosses-the-road arcade game (Crossy Road style) — single-file HTML5 Canvas + vanilla JS.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

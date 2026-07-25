@@ -9,3 +9,17 @@ build/
 .DS_Store
 coverage/
 playwright-report/
+
+# asset-generation working artifacts (raw/preview/exploratory renders) --
+# not needed in history; assets/gen/m7.2/final/ (the production sources
+# actually embedded in index.html) IS committed for provenance.
+assets/gen/raw/
+assets/gen/preview/
+assets/gen/*/raw/
+assets/gen/*/preview/
+assets/gen/*/sfx/
+assets/gen/m7.1b-styleA/
+assets/gen/m7.1b-styleB/
+assets/test-*.webp
+assets/test-*.flac
+tests/e2e/results.json
