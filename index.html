@@ -1266,7 +1266,9 @@ class Game {
   }
 
   onFirstInput(){ this.audio.unlock(); }
-  toggleMute(){ return this.audio.toggleMute(); }
+  /* M7.7 soft-press feedback (DESIGN §1.4/§7.2/§9): brief scale-0.96 +
+     shadow-shrink pulse on every mute toggle, keyboard or touch/click. */
+  toggleMute(){ this._mutePressT = 0.12; return this.audio.toggleMute(); }
   /* convert client px → virtual coords and test the mute button */
   hitMute(clientX, clientY){
     const r = this.canvas.getBoundingClientRect();
@@ -1544,6 +1546,7 @@ class Game {
   }
 
   update(dt){
+    if(this._mutePressT>0) this._mutePressT -= dt; // decays in every state, incl. TITLE
     if(this.state===S.TITLE){
       this.titleChicken.idlePhase += dt;
       return;
@@ -1631,21 +1634,39 @@ class Game {
     }
   }
 
-  /* shared pixel-notch panel (DESIGN §1.3 / handoff note 5) */
-  _panel(ctx, x, y, w, h, fill){
-    const n=8;
-    ctx.fillStyle='rgba(0,0,0,0.6)'; // hard offset shadow
-    this._notchPath(ctx, x+4, y+4, w, h, n); ctx.fill();
+  /* shared rounded panel (DESIGN §1.3/§1.4, REVISED M7.7/SCOPE-04 — was a
+     hard-offset-shadow pixel-notch panel; now a soft-shadow rounded-rect to
+     match the Option-B illustrated world art). `--radius-panel: 20px` is the
+     default radius for the big stat/modal panels this is normally called
+     for (stage-clear/game-over/victory); pass `r` to use `--radius-control:
+     12px` for smaller chip-style callers. */
+  _panel(ctx, x, y, w, h, fill, r){
+    r = r===undefined ? 20 : r; // --radius-panel default
+    ctx.save();
+    ctx.shadowColor='rgba(15,23,42,0.35)'; ctx.shadowBlur=24; ctx.shadowOffsetY=8;
     ctx.fillStyle=fill||'#192134';
-    this._notchPath(ctx, x, y, w, h, n); ctx.fill();
+    this._roundRectPath(ctx, x, y, w, h, r); ctx.fill();
+    ctx.restore();
+    // second, tighter shadow pass (--shadow-panel's 2nd layer: 0 2px 6px)
+    ctx.save();
+    ctx.shadowColor='rgba(15,23,42,0.25)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
+    this._roundRectPath(ctx, x, y, w, h, r); ctx.fill();
+    ctx.restore();
     ctx.strokeStyle='rgba(255,255,255,0.10)'; ctx.lineWidth=2;
-    this._notchPath(ctx, x, y, w, h, n); ctx.stroke();
+    this._roundRectPath(ctx, x, y, w, h, r); ctx.stroke();
   }
-  _notchPath(ctx,x,y,w,h,n){
+  /* rounded-rect path helper (DESIGN §1.3 — replaces the old _notchPath
+     8px pixel-notch corner). Manual arc-based path (not relying on
+     ctx.roundRect for wider engine support), r clamped so w/h never invert. */
+  _roundRectPath(ctx,x,y,w,h,r){
+    r = Math.max(0, Math.min(r, w/2, h/2));
     ctx.beginPath();
-    ctx.moveTo(x+n,y); ctx.lineTo(x+w-n,y); ctx.lineTo(x+w,y+n);
-    ctx.lineTo(x+w,y+h-n); ctx.lineTo(x+w-n,y+h); ctx.lineTo(x+n,y+h);
-    ctx.lineTo(x,y+h-n); ctx.lineTo(x,y+n); ctx.closePath();
+    ctx.moveTo(x+r,y);
+    ctx.lineTo(x+w-r,y); ctx.arcTo(x+w,y,x+w,y+r,r);
+    ctx.lineTo(x+w,y+h-r); ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
+    ctx.lineTo(x+r,y+h); ctx.arcTo(x,y+h,x,y+h-r,r);
+    ctx.lineTo(x,y+r); ctx.arcTo(x,y,x+r,y,r);
+    ctx.closePath();
   }
 
   _renderStageClear(ctx){
@@ -1792,10 +1813,15 @@ class Game {
     // left: SCORE
     drawText(ctx,'SCORE',12,8,1,'#94A3B8','left',1);
     drawText(ctx,String(this.score),12,20,2,'#FFFFFF','left',1);
-    // center: stage badge (flashes accent on transition)
+    // center: stage badge (flashes accent on transition) — rounded chip,
+    // --radius-control: 12px + --shadow-control (DESIGN §1.3/§1.4/§7.2, M7.7)
     const badge = (this._stageFlash>0 && Math.floor(this.time*20)%2===0) ? '#22C55E' : '#2563EB';
     const bw=textWidth('STAGE '+(this.stage+1)+'/3',1)+16;
-    ctx.fillStyle=badge; ctx.fillRect(VW/2-bw/2, 12, bw, 20);
+    ctx.save();
+    ctx.shadowColor='rgba(15,23,42,0.28)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
+    ctx.fillStyle=badge;
+    this._roundRectPath(ctx, VW/2-bw/2, 12, bw, 20, 12); ctx.fill();
+    ctx.restore();
     drawText(ctx,'STAGE '+(this.stage+1)+'/3',VW/2,18,1,'#FFFFFF','center',1);
     // right: corn (pulses on collect) + mute
     const pulse = this._cornPulse>0;
@@ -1807,16 +1833,33 @@ class Game {
     drawText(ctx,String(this.corn),cx+12,18,2,cornCol,'left',1);
     this._drawMute(ctx);
   }
+  /* mute button — rounded --radius-control: 12px + --shadow-control, and the
+     M7.7 soft-press pressed state (scale 0.96 + shadow shrink) instead of the
+     old hard scale-0.9/shadow-collapse (DESIGN §1.3/§1.4/§7.2/§9). */
   _drawMute(ctx){
     const s=this._muteRect(); const m=this.audio.muted;
-    ctx.fillStyle='rgba(255,255,255,0.06)'; ctx.fillRect(s.x,s.y,s.w,s.h);
-    ctx.strokeStyle='rgba(255,255,255,0.10)'; ctx.lineWidth=1; ctx.strokeRect(s.x+0.5,s.y+0.5,s.w-1,s.h-1);
+    const pressed = this._mutePressT>0;
+    ctx.save();
+    if(pressed){
+      // soft-press: scale to 0.96 around the button's own center
+      const ccx=s.x+s.w/2, ccy=s.y+s.h/2;
+      ctx.translate(ccx,ccy); ctx.scale(0.96,0.96); ctx.translate(-ccx,-ccy);
+    }
+    ctx.shadowColor = pressed ? 'rgba(15,23,42,0.2)' : 'rgba(15,23,42,0.28)';
+    ctx.shadowBlur = pressed ? 2 : 6;
+    ctx.shadowOffsetY = pressed ? 1 : 2;
+    ctx.fillStyle='rgba(255,255,255,0.06)';
+    this._roundRectPath(ctx, s.x, s.y, s.w, s.h, 12); ctx.fill();
+    ctx.shadowColor='transparent'; ctx.shadowBlur=0; ctx.shadowOffsetY=0;
+    ctx.strokeStyle='rgba(255,255,255,0.10)'; ctx.lineWidth=1;
+    this._roundRectPath(ctx, s.x+0.5, s.y+0.5, s.w-1, s.h-1, 11.5); ctx.stroke();
     const bx=s.x+14, by=s.y+16;
     ctx.fillStyle=m?'#94A3B8':'#2563EB';
     ctx.fillRect(bx,by,4,8); ctx.beginPath();
     ctx.moveTo(bx+4,by-3); ctx.lineTo(bx+12,by-8); ctx.lineTo(bx+12,by+16); ctx.lineTo(bx+4,by+11); ctx.closePath(); ctx.fill();
     if(m){ ctx.strokeStyle='#DC2626'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(bx+15,by-4); ctx.lineTo(bx+24,by+13); ctx.stroke(); }
     else { ctx.strokeStyle='#2563EB'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(bx+14,by+4,5,-0.7,0.7); ctx.stroke(); ctx.beginPath(); ctx.arc(bx+14,by+4,9,-0.7,0.7); ctx.stroke(); }
+    ctx.restore();
   }
   _muteRect(){ return { x:VW-46, y:2, w:44, h:44 }; }
 
