@@ -61,94 +61,79 @@ const S = { TITLE:'title', PLAYING:'playing', DYING:'dying', EAGLE:'eagle',
             STAGE_CLEAR:'stageclear', GAME_OVER:'gameover', VICTORY:'victory' };
 
 /* ---------------------------------------------------------------------
-   1. Bitmap font — hand-drawn 5x7 glyph table (DESIGN.md §1.6 approach 2).
-   Guarantees a crisp blocky arcade look with zero external fonts.
-   --------------------------------------------------------------------- */
-const FONT = (function(){
-  const G = {};
-  const def = (c, rows) => { G[c] = rows; };
-  def(' ', ["00000","00000","00000","00000","00000","00000","00000"]);
-  def('0', ["01110","10001","10011","10101","11001","10001","01110"]);
-  def('1', ["00100","01100","00100","00100","00100","00100","01110"]);
-  def('2', ["01110","10001","00001","00010","00100","01000","11111"]);
-  def('3', ["11111","00010","00100","00010","00001","10001","01110"]);
-  def('4', ["00010","00110","01010","10010","11111","00010","00010"]);
-  def('5', ["11111","10000","11110","00001","00001","10001","01110"]);
-  def('6', ["00110","01000","10000","11110","10001","10001","01110"]);
-  def('7', ["11111","00001","00010","00100","01000","01000","01000"]);
-  def('8', ["01110","10001","10001","01110","10001","10001","01110"]);
-  def('9', ["01110","10001","10001","01111","00001","00010","01100"]);
-  def('A', ["01110","10001","10001","11111","10001","10001","10001"]);
-  def('B', ["11110","10001","10001","11110","10001","10001","11110"]);
-  def('C', ["01110","10001","10000","10000","10000","10001","01110"]);
-  def('D', ["11100","10010","10001","10001","10001","10010","11100"]);
-  def('E', ["11111","10000","10000","11110","10000","10000","11111"]);
-  def('F', ["11111","10000","10000","11110","10000","10000","10000"]);
-  def('G', ["01110","10001","10000","10111","10001","10001","01110"]);
-  def('H', ["10001","10001","10001","11111","10001","10001","10001"]);
-  def('I', ["01110","00100","00100","00100","00100","00100","01110"]);
-  def('J', ["00111","00010","00010","00010","10010","10010","01100"]);
-  def('K', ["10001","10010","10100","11000","10100","10010","10001"]);
-  def('L', ["10000","10000","10000","10000","10000","10000","11111"]);
-  def('M', ["10001","11011","10101","10101","10001","10001","10001"]);
-  def('N', ["10001","11001","10101","10011","10001","10001","10001"]);
-  def('O', ["01110","10001","10001","10001","10001","10001","01110"]);
-  def('P', ["11110","10001","10001","11110","10000","10000","10000"]);
-  def('Q', ["01110","10001","10001","10001","10101","10010","01101"]);
-  def('R', ["11110","10001","10001","11110","10100","10010","10001"]);
-  def('S', ["01110","10001","10000","01110","00001","10001","01110"]);
-  def('T', ["11111","00100","00100","00100","00100","00100","00100"]);
-  def('U', ["10001","10001","10001","10001","10001","10001","01110"]);
-  def('V', ["10001","10001","10001","10001","10001","01010","00100"]);
-  def('W', ["10001","10001","10001","10101","10101","11011","10001"]);
-  def('X', ["10001","10001","01010","00100","01010","10001","10001"]);
-  def('Y', ["10001","10001","01010","00100","00100","00100","00100"]);
-  def('Z', ["11111","00001","00010","00100","01000","10000","11111"]);
-  def(':', ["00000","00100","00000","00000","00100","00000","00000"]);
-  def('!', ["00100","00100","00100","00100","00100","00000","00100"]);
-  def("'", ["00100","00100","00000","00000","00000","00000","00000"]);
-  def('/', ["00001","00010","00100","00100","00100","01000","10000"]);
-  def('.', ["00000","00000","00000","00000","00000","00000","00100"]);
-  def(',', ["00000","00000","00000","00000","00000","00100","01000"]);
-  def('-', ["00000","00000","00000","11111","00000","00000","00000"]);
-  def('?', ["01110","10001","00001","00110","00100","00000","00100"]);
-  def('%', ["11001","11010","00100","01011","10011","00000","00000"]);
-  return G;
-})();
+   1. In-game text rendering — native bold rounded system font + soft
+   rounded-join stroke outline (DESIGN.md §1.5/§1.6, REVISED M7.7/SCOPE-04).
+   Replaces the old hand-drawn 5x7 bitmap FONT table/drawText() entirely.
 
-/* draw bitmap text.  align: 'left'|'center'|'right'. outline: 0 none,1 shadow,2 full */
-function textWidth(str, sc){ return str.length * 6 * sc - sc; }
-function drawText(ctx, str, x, y, sc, color, align, outline){
+   Size tokens (exact DESIGN §1.5 values — do not invent new px numbers):
+     label  -> --fs-label  11px / 700  (HUD micro-labels: SCORE/CORN/STAGE)
+     value  -> --fs-value  18px / 800  (HUD numbers, corn count)
+     prompt -> --fs-prompt 13px / 700  (blinking prompts, small accents)
+     body   -> --fs-body   16px / 700  (stat rows on clear/over/victory)
+     title  -> --fs-title  30px / 800  (screen titles)
+
+   NOTE (call-site deviation from uiux's handoff assumption — see this
+   task's 🟠 ISSUE report): §11 assumed drawText()'s 5th arg was already a
+   named "sizeToken" so call sites wouldn't need to change; the actual
+   pre-M7.7 code passed a raw bitmap pixel-scale integer (1-4) instead, and
+   that integer was reused inconsistently across call sites for different
+   semantic sizes (e.g. scale 2 meant both --fs-body 16px stat rows AND,
+   once, a title-class heading). To honor this task's harder rule ("use the
+   exact px/style values uiux specified — don't invent your own"), the 5th
+   arg is now the named string token per call site above (positional
+   signature ctx,str,x,y,size,color,align,outline is otherwise unchanged),
+   updated per-callsite against the exact DESIGN.md §7.2-§7.5 component spec
+   for what that text actually is. --------------------------------------------------------------------- */
+const TEXT_FONT_STACK = "ui-rounded, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+const TEXT_SIZE_TOKENS = {
+  label:  { px:11, weight:700 },
+  value:  { px:18, weight:800 },
+  prompt: { px:13, weight:700 },
+  body:   { px:16, weight:700 },
+  title:  { px:30, weight:800 },
+};
+function _textFont(sizeToken){
+  const t = TEXT_SIZE_TOKENS[sizeToken] || TEXT_SIZE_TOKENS.body;
+  return { font: t.weight+' '+t.px+'px '+TEXT_FONT_STACK, px:t.px };
+}
+/* measures a string's rendered width at a given size token — used only by
+   the HUD stage-badge chip to size its rounded background around the text. */
+function textWidth(ctx, str, sizeToken){
+  str = String(str).toUpperCase();
+  const f = _textFont(sizeToken);
+  ctx.save();
+  ctx.font = f.font;
+  ctx.letterSpacing = '0.3px'; // DESIGN §1.5: tracking relaxes to +0.3px under M7.7
+  const w = ctx.measureText(str).width;
+  ctx.restore();
+  return w;
+}
+/* draw in-game text.  align: 'left'|'center'|'right'.
+   outline: 0 = fill only (used for dark text already legible on a light,
+   non-busy backdrop, e.g. title-screen prompt copy), 1 or 2 = apply the
+   §1.6 soft rounded-join stroke outline (both truthy values collapse to the
+   one spec'd technique — the old hand-pixel-stamped 1-tier/2-tier shadow
+   distinction doesn't apply to a native strokeText pass). */
+function drawText(ctx, str, x, y, sizeToken, color, align, outline){
   str = String(str).toUpperCase();
   align = align || 'left';
   outline = (outline===undefined) ? 2 : outline;
-  const w = textWidth(str, sc);
-  let ox = x;
-  if(align==='center') ox = Math.round(x - w/2);
-  else if(align==='right') ox = Math.round(x - w);
-  const drawAt = (dx, dy, col) => {
-    ctx.fillStyle = col;
-    let cx = ox + dx;
-    for(let i=0;i<str.length;i++){
-      const g = FONT[str[i]] || FONT['?'];
-      for(let r=0;r<7;r++){
-        const row = g[r];
-        for(let c=0;c<5;c++){
-          if(row[c]==='1') ctx.fillRect(cx + c*sc, (y+dy) + r*sc, sc, sc);
-        }
-      }
-      cx += 6*sc;
-    }
-  };
-  if(outline===2){
-    const o = 'rgba(0,0,0,0.75)';
-    for(let dx=-sc; dx<=sc; dx+=sc) for(let dy=-sc; dy<=sc; dy+=sc){
-      if(dx||dy) drawAt(dx,dy,o);
-    }
-  } else if(outline===1){
-    drawAt(sc, sc, 'rgba(0,0,0,0.7)');
+  const f = _textFont(sizeToken);
+  ctx.save();
+  ctx.font = f.font;
+  ctx.letterSpacing = '0.3px';
+  ctx.textAlign = align;
+  ctx.textBaseline = 'top';
+  if(outline){
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+    ctx.lineWidth = f.px * 0.22;
+    ctx.strokeStyle = 'rgba(15,23,42,0.85)';
+    ctx.strokeText(str, x, y);
   }
-  drawAt(0,0,color);
+  ctx.fillStyle = color;
+  ctx.fillText(str, x, y);
+  ctx.restore();
 }
 
 /* ---------------------------------------------------------------------
@@ -1671,18 +1656,18 @@ class Game {
 
   _renderStageClear(ctx){
     ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(0,0,VW,VH);
-    const pw=252, ph=170, px=(VW-pw)/2, py=(VH-ph)/2;
+    const pw=252, ph=186, px=(VW-pw)/2, py=(VH-ph)/2;
     this._panel(ctx,px,py,pw,ph);
-    drawText(ctx,'STAGE '+(this._clearSnapStage+1)+' CLEAR!',VW/2,py+26,2,'#22C55E','center',2);
-    drawText(ctx,'SCORE',px+28,py+72,2,'#FFFFFF','left',1);
-    drawText(ctx,String(this.score),px+pw-28,py+72,2,'#FFFFFF','right',1);
-    drawText(ctx,'CORN',px+28,py+98,2,'#FFFFFF','left',1);
-    drawText(ctx,String(this.corn),px+pw-28,py+98,2,'#FFD23F','right',1);
+    drawText(ctx,'STAGE '+(this._clearSnapStage+1)+' CLEAR!',VW/2,py+18,'title','#22C55E','center',2);
+    drawText(ctx,'SCORE',px+28,py+86,'body','#FFFFFF','left',1);
+    drawText(ctx,String(this.score),px+pw-28,py+86,'body','#FFFFFF','right',1);
+    drawText(ctx,'CORN',px+28,py+112,'body','#FFFFFF','left',1);
+    drawText(ctx,String(this.corn),px+pw-28,py+112,'body','#FFD23F','right',1);
     // progress bar
-    const bw=pw-56, bx=px+28, by=py+128;
+    const bw=pw-56, bx=px+28, by=py+144;
     ctx.fillStyle='rgba(255,255,255,0.12)'; ctx.fillRect(bx,by,bw,6);
     ctx.fillStyle='#22C55E'; ctx.fillRect(bx,by,bw*Math.min(1,this._clearT/1.9),6);
-    drawText(ctx,'GET READY...',VW/2,py+142,1,'#94A3B8','center',2);
+    drawText(ctx,'GET READY...',VW/2,py+158,'prompt','#94A3B8','center',2);
   }
 
   _renderVictory(ctx){
@@ -1692,19 +1677,19 @@ class Game {
       ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.r);
       ctx.fillStyle=p.c; ctx.fillRect(-p.s/2,-p.s/2,p.s,p.s); ctx.restore();
     }
-    const pw=252, ph=180, px=(VW-pw)/2, py=(VH-ph)/2;
+    const pw=252, ph=196, px=(VW-pw)/2, py=(VH-ph)/2;
     this._panel(ctx,px,py,pw,ph);
-    drawText(ctx,'VICTORY!',VW/2,py+26,3,'#FFD23F','center',2);
-    drawText(ctx,'SCORE',px+28,py+80,2,'#FFFFFF','left',1);
-    drawText(ctx,String(this.score),px+pw-28,py+80,2,'#FFFFFF','right',1);
-    drawText(ctx,'CORN',px+28,py+104,2,'#FFFFFF','left',1);
-    drawText(ctx,String(this.corn),px+pw-28,py+104,2,'#FFD23F','right',1);
-    drawText(ctx,'BEST',px+28,py+128,2,'#FFFFFF','left',1);
-    drawText(ctx,String(this.highScore),px+pw-28,py+128,2,'#FFD23F','right',1);
+    drawText(ctx,'VICTORY!',VW/2,py+18,'title','#FFD23F','center',2);
+    drawText(ctx,'SCORE',px+28,py+88,'body','#FFFFFF','left',1);
+    drawText(ctx,String(this.score),px+pw-28,py+88,'body','#FFFFFF','right',1);
+    drawText(ctx,'CORN',px+28,py+114,'body','#FFFFFF','left',1);
+    drawText(ctx,String(this.corn),px+pw-28,py+114,'body','#FFD23F','right',1);
+    drawText(ctx,'BEST',px+28,py+140,'body','#FFFFFF','left',1);
+    drawText(ctx,String(this.highScore),px+pw-28,py+140,'body','#FFD23F','right',1);
     if(this.newBest && (Math.floor(this.time*3)%2===0))
-      drawText(ctx,'NEW BEST!',VW/2,py+148,1,'#FFD23F','center',2);
+      drawText(ctx,'NEW BEST!',VW/2,py+166,'prompt','#FFD23F','center',2);
     if((Math.floor(this.time*2)%2)===0)
-      drawText(ctx,'SPACE / TAP TO PLAY AGAIN',VW/2,py+ph-14,1,'#FFFFFF','center',2);
+      drawText(ctx,'SPACE / TAP TO PLAY AGAIN',VW/2,py+ph-22,'prompt','#FFFFFF','center',2);
   }
 
   /* ---- world: parallax sky + lanes + entities + player + particles ---- */
@@ -1810,19 +1795,19 @@ class Game {
     ctx.fillRect(0,0,VW,HUD_H);
     ctx.fillStyle = 'rgba(255,255,255,0.10)';
     ctx.fillRect(0,HUD_H-1,VW,1);
-    // left: SCORE
-    drawText(ctx,'SCORE',12,8,1,'#94A3B8','left',1);
-    drawText(ctx,String(this.score),12,20,2,'#FFFFFF','left',1);
+    // left: SCORE (label + value tokens per DESIGN §1.5/§7.2)
+    drawText(ctx,'SCORE',12,7,'label','#94A3B8','left',1);
+    drawText(ctx,String(this.score),12,19,'value','#FFFFFF','left',1);
     // center: stage badge (flashes accent on transition) — rounded chip,
     // --radius-control: 12px + --shadow-control (DESIGN §1.3/§1.4/§7.2, M7.7)
     const badge = (this._stageFlash>0 && Math.floor(this.time*20)%2===0) ? '#22C55E' : '#2563EB';
-    const bw=textWidth('STAGE '+(this.stage+1)+'/3',1)+16;
+    const bw=textWidth(ctx,'STAGE '+(this.stage+1)+'/3','label')+16;
     ctx.save();
     ctx.shadowColor='rgba(15,23,42,0.28)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
     ctx.fillStyle=badge;
     this._roundRectPath(ctx, VW/2-bw/2, 12, bw, 20, 12); ctx.fill();
     ctx.restore();
-    drawText(ctx,'STAGE '+(this.stage+1)+'/3',VW/2,18,1,'#FFFFFF','center',1);
+    drawText(ctx,'STAGE '+(this.stage+1)+'/3',VW/2,17,'label','#FFFFFF','center',1);
     // right: corn (pulses on collect) + mute
     const pulse = this._cornPulse>0;
     const cornCol = pulse ? '#FFFFFF' : '#FFD23F';
@@ -1830,7 +1815,7 @@ class Game {
     // corn icon
     ctx.fillStyle='#7ABF4C'; ctx.fillRect(cx-2, 18, 8, 6);
     ctx.fillStyle='#FFD23F'; ctx.fillRect(cx-1, 12, 3, 3); ctx.fillRect(cx+2, 12, 3, 3);
-    drawText(ctx,String(this.corn),cx+12,18,2,cornCol,'left',1);
+    drawText(ctx,String(this.corn),cx+12,15,'value',cornCol,'left',1);
     this._drawMute(ctx);
   }
   /* mute button — rounded --radius-control: 12px + --shadow-control, and the
@@ -1867,22 +1852,22 @@ class Game {
     // red-tinted danger scrim (DESIGN §7.4)
     ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(0,0,VW,VH);
     ctx.fillStyle='rgba(220,38,38,0.28)'; ctx.fillRect(0,0,VW,VH);
-    const pw=252, ph=196, px=(VW-pw)/2, py=(VH-ph)/2;
+    const pw=252, ph=214, px=(VW-pw)/2, py=(VH-ph)/2;
     this._panel(ctx,px,py,pw,ph);
-    drawText(ctx,'GAME OVER',VW/2,py+24,3,'#DC2626','center',2);
+    drawText(ctx,'GAME OVER',VW/2,py+16,'title','#DC2626','center',2);
     const causes={ car:'SQUASHED!', train:'STRUCK BY TRAIN!', water:'SWEPT AWAY!',
       'river-edge':'SWEPT AWAY!', eagle:'SNATCHED BY AN EAGLE!' };
-    drawText(ctx, causes[this._deathCause]||'GAME OVER', VW/2, py+56, 1, '#94A3B8','center',2);
-    drawText(ctx,'SCORE',px+28,py+82,2,'#FFFFFF','left',1);
-    drawText(ctx,String(this.score),px+pw-28,py+82,2,'#FFFFFF','right',1);
-    drawText(ctx,'CORN',px+28,py+106,2,'#FFFFFF','left',1);
-    drawText(ctx,String(this.corn),px+pw-28,py+106,2,'#FFD23F','right',1);
-    drawText(ctx,'BEST',px+28,py+130,2,'#FFFFFF','left',1);
-    drawText(ctx,String(this.highScore),px+pw-28,py+130,2,'#FFD23F','right',1);
+    drawText(ctx, causes[this._deathCause]||'GAME OVER', VW/2, py+58, 'body', '#94A3B8','center',2);
+    drawText(ctx,'SCORE',px+28,py+92,'body','#FFFFFF','left',1);
+    drawText(ctx,String(this.score),px+pw-28,py+92,'body','#FFFFFF','right',1);
+    drawText(ctx,'CORN',px+28,py+118,'body','#FFFFFF','left',1);
+    drawText(ctx,String(this.corn),px+pw-28,py+118,'body','#FFD23F','right',1);
+    drawText(ctx,'BEST',px+28,py+144,'body','#FFFFFF','left',1);
+    drawText(ctx,String(this.highScore),px+pw-28,py+144,'body','#FFD23F','right',1);
     if(this.newBest && (Math.floor(this.time*3)%2===0))
-      drawText(ctx,'NEW BEST!',VW/2,py+152,1,'#FFD23F','center',2);
+      drawText(ctx,'NEW BEST!',VW/2,py+172,'prompt','#FFD23F','center',2);
     if((Math.floor(this.time*2)%2)===0)
-      drawText(ctx,'SPACE / TAP TO RESTART',VW/2,py+ph-16,1,'#FFFFFF','center',2);
+      drawText(ctx,'SPACE / TAP TO RESTART',VW/2,py+ph-24,'prompt','#FFFFFF','center',2);
   }
 
   _renderTitle(ctx){
@@ -1896,8 +1881,8 @@ class Game {
     ctx.fillStyle='#7FC24C'; for(let i=-1;i<4;i++){ ctx.beginPath(); ctx.arc(i*120+60,340,80,Math.PI,0); ctx.fill(); }
     ctx.fillStyle='#6ABE30'; ctx.fillRect(0,330,VW,VH-330);
     // title
-    drawText(ctx, 'CHICKEN', VW/2, 96, 4, '#FFFFFF', 'center', 2);
-    drawText(ctx, 'ROAD',    VW/2, 150, 4, '#DC2626', 'center', 2);
+    drawText(ctx, 'CHICKEN', VW/2, 96, 'title', '#FFFFFF', 'center', 2);
+    drawText(ctx, 'ROAD',    VW/2, 150, 'title', '#DC2626', 'center', 2);
     // idle-animated hero chicken (4x)
     const f = Math.floor((this.titleChicken.idlePhase*1000/180)) % 4;
     const headDy = [0,1,2,1][f];
@@ -1908,10 +1893,10 @@ class Game {
     ctx.restore();
     const blink = (Math.floor(this.time*2)%2)===0;
     if(blink){
-      drawText(ctx, 'PRESS SPACE TO START', VW/2, 380, 1, '#0F172A', 'center', 0);
-      drawText(ctx, 'TAP TO START', VW/2, 400, 1, '#0F172A', 'center', 0);
+      drawText(ctx, 'PRESS SPACE TO START', VW/2, 380, 'prompt', '#0F172A', 'center', 0);
+      drawText(ctx, 'TAP TO START', VW/2, 400, 'prompt', '#0F172A', 'center', 0);
     }
-    if(this.highScore>0) drawText(ctx,'BEST: '+this.highScore, VW/2, 430, 1, '#B8860B','center',0);
+    if(this.highScore>0) drawText(ctx,'BEST: '+this.highScore, VW/2, 430, 'prompt', '#B8860B','center',0);
     // mute control visible on title too
     this._drawMute(ctx);
   }
