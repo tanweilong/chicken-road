@@ -57,10 +57,63 @@ satisfying, with squash-and-stretch, dust puffs, screen shake, and juicy audio.
 
 ## 5. Technical Constraints (from brief — non-negotiable)
 
-- ONE HTML file. No external images, fonts, audio files, or network calls.
+> **⚠️ AMENDMENT — 2026-07-24 (client-directed scope change; supersedes the two
+> struck constraints below).** The product owner has explicitly authorized an
+> exception to the original "all sprites drawn programmatically / no external
+> images" rule: the team MAY now use **Hugging Face MCP-generated raster art**
+> for chicken-road assets going forward (e.g. to test/use the reconnected
+> Hugging Face image-generation tool for this project).
+>
+> **Reconciliation with the still-binding "ONE HTML file / no network calls at
+> runtime" rule:** generated raster images MUST be **embedded as inline base64
+> `data:` URIs directly in the shipped `index.html`** — there is **NO live
+> network fetch of any asset at runtime**. Asset generation happens at build/
+> authoring time only; the shipped artifact remains a single, self-contained
+> HTML file that makes **zero network calls when played**. Programmatically-drawn
+> art remains fully allowed and may continue to be used alongside (or instead of)
+> generated raster assets — this amendment ADDS an option, it does not mandate
+> raster art, and it does not relax the no-runtime-network-calls rule. See
+> `docs/reports/ISSUES.md` (SCOPE-01) for the decision record. uiux will update
+> DESIGN.md §10 after running the actual asset-generation test.
+
+> **⚠️ AMENDMENT #2 — 2026-07-24 (client-directed scope change; audio-asset
+> parallel to the raster-art amendment above; supersedes the struck "All SFX
+> synthesized via Web Audio API" constraint below).** The product owner has
+> approved a Hugging Face MCP-generated sound-effect sample
+> (`assets/test-sfx-hop.flac`, an 8-bit hop blip generated via the
+> `hkchengrex/MMAudio` text-to-audio Space) and directed that generated audio
+> assets MAY now be used for chicken-road SFX in place of pure Web Audio
+> oscillator synthesis.
+>
+> **Reconciliation with the still-binding "ONE HTML file / no runtime network
+> calls" rule:** exactly as for raster art (SCOPE-01), generated audio MUST be
+> embedded as inline base64 `data:` URIs in the shipped `index.html` and
+> decoded/played from an in-memory buffer (Web Audio `decodeAudioData` + a
+> buffer source) — there is ZERO runtime network fetch of any audio file.
+> Generation happens at authoring time only. The Web Audio API is STILL used
+> (as the playback engine and for the mute/gain graph); what changes is the
+> *sound source* (decoded generated samples instead of, or alongside,
+> oscillator synthesis). A programmatic Web Audio synthesis fallback remains
+> permitted and should be kept for any SFX not successfully generated. The
+> mute toggle (AC-11) and unlock-on-first-input behavior are unchanged. See
+> `docs/reports/ISSUES.md` (SCOPE-02) for the decision record.
+
+- ~~ONE HTML file. No external images, fonts, audio files, or network calls.~~
+  → **ONE HTML file; no network calls *at runtime*.** External raster images MAY
+  be generated (Hugging Face MCP) at authoring time but MUST be inlined as
+  base64 `data:` URIs in the shipped HTML (no runtime fetch). No external fonts
+  or audio files. (Amended 2026-07-24 per SCOPE-01.)
 - HTML5 Canvas 2D + vanilla JS only. No frameworks, no build step.
-- All sprites/art drawn programmatically (pixel art via canvas primitives).
-- All SFX synthesized via Web Audio API.
+- ~~All sprites/art drawn programmatically (pixel art via canvas primitives).~~
+  → Sprites/art MAY be drawn programmatically (pixel art via canvas primitives)
+  **and/or** supplied as Hugging Face MCP-generated raster assets inlined as
+  base64 per the amendment above. (Amended 2026-07-24 per SCOPE-01.)
+- ~~All SFX synthesized via Web Audio API.~~
+  → SFX MAY be synthesized via the Web Audio API **and/or** supplied as
+  Hugging Face MCP-generated audio samples inlined as base64 `data:` URIs and
+  played through Web Audio (decode-to-buffer), per AMENDMENT #2 above. No
+  external audio files are fetched at runtime; the mute toggle mutes ALL SFX
+  regardless of source. (Amended 2026-07-24 per SCOPE-02.)
 - 60fps game loop using `requestAnimationFrame` with **delta-time** movement so
   behavior is frame-rate independent.
 - Code structured with classes: `Player`, `Lane`, `Vehicle`, `Log`, `Train`,
@@ -267,6 +320,14 @@ Each stage has a distinct palette and parallax background detail.
   **Then** the audio context resumes and SFX are audible thereafter.
 - **Given** a mute control, **When** toggled, **Then** all SFX mute/unmute.
 
+> **AC-11 note (amended 2026-07-24 per SCOPE-02):** SFX MAY now be Hugging
+> Face MCP-generated samples inlined as base64 `data:` URIs and played via Web
+> Audio `decodeAudioData`/buffer sources, in place of or alongside oscillator
+> synthesis. "No external files, no 404s" still holds — a `data:` URI is not
+> an external file, and tester must still assert ZERO runtime network requests
+> fire (per §11). The mute toggle must still mute/unmute ALL SFX regardless of
+> source, and unlock-on-first-input must still work.
+
 ### AC-12 Performance & delta-time
 - **Given** the game running on a 60Hz display, **When** playing, **Then** it
   targets ~60fps with no persistent stutter under normal play.
@@ -285,6 +346,13 @@ Each stage has a distinct palette and parallax background detail.
 - **Given** the single HTML file, **When** reviewed, **Then** it defines the
   classes `Player`, `Lane`, `Vehicle`, `Log`, `Train`, a particle system, and
   `Camera` (plus supporting managers), and contains no external asset references.
+
+> **AC-14 note (amended 2026-07-24 per SCOPE-01):** "no external asset
+> references" now means **no *runtime* network fetches** — Hugging Face
+> MCP-generated raster assets are permitted provided they are inlined as base64
+> `data:` URIs in the shipped HTML. A `data:` URI is not an external reference.
+> Tester should still assert zero network requests fire at runtime (per §11
+> success metrics).
 
 ## 10. Out of Scope (v1)
 
