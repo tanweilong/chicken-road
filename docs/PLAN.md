@@ -504,3 +504,24 @@ positive. **4 programmatic fallbacks total (zero product risk):** veh-s2-truck +
 tile-s2-road + tile-s3-road + tile-s3-rail. This 30-asset set is the
 authoritative input to frontend M7.4 wiring — veh-s2-truck must NOT be wired,
 its existing programmatic draw renders. Frontend scaffold/wiring still running.
+
+### 7.16 M7.5 PASS → proceed to M7.7 chrome restyle (2026-07-24)
+
+Tester M7.5: **PASS** — 51/55 checks pass, 3 = test-harness artifacts (ISS-07
+RESOLVED, proven NOT a regression via replay against pre-BUG-7 2d3e23a), 1 info.
+0 Critical/Major/Minor PRODUCT defects. Zero-network independently re-verified;
+all 30 wired assets render per stage; all 4 programmatic fallbacks render clean;
+force-disable (corrupt registry mid-session) falls back with 0 errors; audio
+fallback + mute intact (generated-SFX slot empty per ENV-03); ~120fps, negligible
+load impact from the 593KB file.
+
+**Now: M7.7 — chrome/HUD/particle restyle (SCOPE-04, the last coherence gap for
+an Option-B ship).** Inputs to fold in: SCOPE-04 core (panels §1.3/1.4, in-game
+text §1.6, HUD §7.2, particles §5 → harmonize with smooth illustrated art),
+ISS-06 (smoothing-flag doc reconciliation — frontend's runtime split stands),
+and the mute button's rounded corners (fix to match — or intentionally re-define
+— the corner rule). Plus 3 low-priority TEST-harness fixes (hook score-sync =
+frontend; buffer threshold + strip-query-before-reload = tester).
+After M7.7 impl lands on feature/asset-regen → tester RE-RUNS the M7.5
+regression to cover the restyled chrome → then PR (USER CONFIRM). Do NOT PR
+before M7.7 + its re-test, unless the client requests an images-only interim.

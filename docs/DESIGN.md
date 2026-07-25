@@ -72,10 +72,32 @@ above.
 recommendation):** the PRD forbids external fonts/images/network calls in the
 shipped single HTML file. **Do not `@import` or `<link>` Google Fonts
 (Press Start 2P/VT323) inside the actual game.** They are referenced here
-only as the *mood reference* for the bitmap-font look to emulate. See §2.3
-for the two approved in-game text rendering techniques. (The reference
+only as the *mood reference* for the bitmap-font look to emulate. See §1.6
+for the final approved in-game text rendering technique. (The reference
 mockup `design/style-guide.html` is a separate review artifact, not the
 shipped game, and is also kept network-free — see §9.)
+
+**STATUS UPDATE (2026-07-25, M7.7 — SCOPE-04 RESOLVED, ISS-06 RESOLVED.)**
+The chrome/HUD/particle restyle scoped by SCOPE-04 above is now designed.
+**Decision: EVOLVE the chrome language to match Option B, rather than just
+tidy up the old hard-edge rules.** World art is now warm, soft-edged,
+gently-shaded illustration — keeping a zero-radius, hard-offset-shadow,
+notched-panel HUD sitting on top of it reads as an unfinished placeholder
+skin bolted onto a finished game, not one designed product, and the
+client's own SCOPE-03 ask ("less pixelated... so the user can see the
+object clearly") was fundamentally a softness/legibility preference that
+applies to the chrome exactly as much as it did to the world. So: panels,
+badges, buttons and the HUD's small controls (mute button included) move to
+rounded corners + soft diffuse shadows; in-game text drops the hand-drawn
+bitmap font for a natively-rendered bold rounded sans with a soft stroked
+outline; particles keep their cheap simple-primitive construction (no perf
+cost) but the two amorphous effects (dust, splash droplets) round from
+squares to circles, while the two inherently-angular effects (feather,
+sparkle) stay as-is because their shape *is* their meaning (§8's "shape
+carries meaning, not just color" rule) and rounding them would blur that
+read for zero visual gain. Full spec: §1.3 (corners), §1.4 (shadows), §1.5/
+§1.6 (type/text), §5 (particles), §7.2 (HUD). This closes SCOPE-04 and, with
+it, ISS-06's §1.1 documentation inconsistency — resolution in §1.1 below.
 
 ---
 
@@ -91,9 +113,25 @@ shipped game, and is also kept network-free — see §9.)
   runtime constants below are RETAINED as-is for this task (this is an
   asset-generation-spec task, not a runtime-rendering-pipeline change); how
   the new higher-resolution illustrated source art gets fit into this
-  existing grid at runtime (e.g. whether `imageSmoothingEnabled` stays
-  `false` for the new art) is explicitly part of M7.7's scope
-  (`docs/reports/ISSUES.md` SCOPE-04), not decided here.
+  existing grid at runtime is now settled **(M7.7, 2026-07-25 — ISS-06
+  RESOLVED, doc-only reconciliation, no runtime behavior changed):**
+  `imageSmoothingEnabled` is set `true`, scoped tightly around each
+  `drawImage` call that paints Option-B raster art (chicken, vehicles,
+  tiles, parallax images, corn, log/pad, train, eagle), then reset to
+  `false` immediately after — frontend's M7.4 implementation already does
+  exactly this; this note simply ratifies it as the documented final
+  answer rather than an open question. `imageSmoothingEnabled` stays
+  `false` as the canvas-wide default for everything else. **The
+  clarification that resolves the §1.1/§11 tension ISS-06 flagged:** that
+  flag only affects `drawImage`/pattern raster-scaling interpolation — it
+  has zero effect on vector path drawing (`fillRect`, `arc`, `stroke`,
+  `fillText`/`strokeText`), which the browser always anti-aliases natively
+  regardless of this flag's value. So the chrome/HUD/particle layer
+  defaulting to `false` was never actually an obstacle to the softer,
+  rounded, natively-anti-aliased chrome M7.7 specifies below (§1.3-§1.6,
+  §5, §7.2) — there is no raster chrome art being smoothed-or-not in the
+  first place, only vector primitives and native canvas text, both of
+  which render smoothly by default regardless of the flag.
 - **Virtual/logical canvas = 336 × 576px** (7 tiles wide × 12 tiles tall).
   This is the fixed internal resolution the game always renders at
   internally; it is then scaled-to-fit + letterboxed to the real viewport
@@ -112,44 +150,133 @@ shipped game, and is also kept network-free — see §9.)
 for all HUD padding, panel padding, and inter-element gaps on overlay
 screens.
 
-### 1.3 Radius / corner treatment
-**No rounded corners.** Panels use a **pixel-notch** corner (an 8px square
-notch cut from each of the 4 corners via `clip-path: polygon(...)`), the
-classic blocky-UI-panel silhouette. Buttons/badges use hard 0-radius
-rectangles only.
+### 1.3 Radius / corner treatment — REVISED M7.7 (2026-07-25, SCOPE-04)
+**RESOLVED: rounded corners are now the universal chrome rule**, replacing
+the pixel-notch/hard-0-radius language (kept below, struck through, for
+history). Every chrome surface — the HUD's inner controls (stage badge,
+corn chip, mute button) and every overlay panel (stage-clear/game-over/
+victory) — uses a real rounded-rect path (`ctx.roundRect(x,y,w,h,r)`, or an
+equivalent manual arc-based path for engines without native support), at
+two radius tokens:
 
-### 1.4 Shadows
-**Hard offset shadows only, no blur:** `4px 4px 0 rgba(0,0,0,0.6)` for
-panels and primary buttons, `2px 2px 0 rgba(0,0,0,0.6)` for small badges/
-chips. Pressed state collapses the offset to `0 0` and translates the
-element by the same amount (mechanical-press feel).
+```css
+--radius-panel:   20px; /* stage-clear / game-over / victory modal panels */
+--radius-control: 12px; /* stage badge, corn chip, mute button, small chips */
+--radius-pill:     3px; /* stage-clear progress bar — fully-rounded ends, radius = half its 6px height */
+```
 
-### 1.5 Type scale (semantic sizes, in logical px equivalent)
-| Token | Size | Use |
-|---|---|---|
-| `--fs-label` | 8px glyph height | HUD micro-labels ("SCORE", "CORN", "STAGE") |
-| `--fs-value` | 12px glyph height | HUD numbers, corn count |
-| `--fs-prompt` | 10px glyph height | Blinking prompts ("PRESS SPACE TO START") |
-| `--fs-body` | 14px glyph height | Stat rows on stage-clear/game-over |
-| `--fs-title` | 24px glyph height | Screen titles ("GAME OVER", "STAGE 2 CLEAR!") |
+**Mute-button resolution (the specific inconsistency M7.5/M7.7 flagged):**
+checked against the actual `index.html` source as of this task — the mute
+button (and every other HUD element: stage badge, corn chip, panels) is in
+fact drawn with sharp `fillRect`/`strokeRect`/notch-path calls today; no
+rounded-corner code exists anywhere in the file. The rounded look visible in
+the M7.5 screenshots is most likely a non-integer canvas-scaling/screenshot
+-capture rendering artifact, not an implemented radius. Either way the
+question is now moot: **the rule is "rounded, on `--radius-control`,
+everywhere in chrome, including the mute button"** — frontend implements a
+real, intentional, on-token radius on the mute button (matching every other
+control), rather than anything accidental surviving by default.
 
-All type is **uppercase**, monospaced-cadence (fixed advance width per
-glyph), letter-spacing +1px.
+~~Original rule (superseded): no rounded corners; panels used an 8px
+pixel-notch corner (`clip-path: polygon(...)`); buttons/badges were hard
+0-radius rectangles only.~~ *(kept for history, do not implement)*
 
-### 1.6 In-game text rendering (no external fonts — pick ONE approach)
-1. **Preferred: offscreen low-res text buffer.** Render HUD/screen text with
-   a system monospace stack (`ui-monospace, 'Courier New', monospace`) at a
-   small integer pixel size (e.g. 8px) onto an **offscreen low-resolution
-   canvas**, then `drawImage` that buffer onto the main canvas scaled up by
-   an integer factor with `imageSmoothingEnabled = false`. This fakes a
-   crisp blocky bitmap-font look with zero external assets and minimal code.
-2. **Alternative: hand-drawn bitmap font.** A small `fillRect`-based 5×7
-   glyph table for digits 0-9, A-Z, and punctuation `: ! ' space`. Higher
-   fidelity, more code. Not required for v1 — flag as a stretch/nice-to-have
-   if time allows in M4.
-- **Global rule:** every piece of in-canvas text gets a **1–2px dark outline
-  or drop shadow** (`rgba(0,0,0,0.7)`) so it stays legible over any of the
-  three busy, high-detail stage backgrounds (see §8 Accessibility).
+### 1.4 Shadows — REVISED M7.7 (2026-07-25, SCOPE-04)
+**RESOLVED: soft, diffuse, blurred shadows replace the old hard-offset/
+no-blur rule**, to match the gentle shading already used on Option-B world
+art:
+
+```css
+--shadow-panel:   0 8px 24px rgba(15,23,42,0.35), 0 2px 6px rgba(15,23,42,0.25);
+--shadow-control: 0 2px 6px rgba(15,23,42,0.28);
+```
+Canvas equivalent: `ctx.shadowColor`, `ctx.shadowBlur`, `ctx.shadowOffsetY`
+(canvas `shadowBlur` is a real blur and can be applied directly — no more
+hard-copy-offset-rect trick needed, since that was only ever a workaround
+for the lack of blur in the old zero-AA aesthetic).
+
+**Pressed state (was: offset collapses to `0 0` + translate, a "mechanical
+stamp" feel):** now **scale down to 0.96 and shrink the shadow** to
+`0 1px 2px rgba(15,23,42,0.2)` — standard soft-UI press feedback that reads
+correctly against a blurred shadow (there's no hard offset left to collapse
+to zero).
+
+~~Original rule (superseded): `4px 4px 0 rgba(0,0,0,0.6)` panels /
+`2px 2px 0 rgba(0,0,0,0.6)` chips, no blur; pressed = offset→0 +
+translate.~~ *(kept for history, do not implement)*
+
+### 1.5 Type scale — REVISED M7.7 (2026-07-25, SCOPE-04)
+Sizes are now real native font-size px (was: bitmap glyph-height px), since
+§1.6 below replaces the hand-drawn bitmap font with natively-rendered text:
+
+| Token | Size | Weight | Use |
+|---|---|---|---|
+| `--fs-label` | 11px | 700 | HUD micro-labels ("SCORE", "CORN", "STAGE") |
+| `--fs-value` | 18px | 800 | HUD numbers, corn count |
+| `--fs-prompt` | 13px | 700 | Blinking prompts ("PRESS SPACE TO START") |
+| `--fs-body` | 16px | 700 | Stat rows on stage-clear/game-over |
+| `--fs-title` | 30px | 800 | Screen titles ("GAME OVER", "STAGE 2 CLEAR!") |
+
+All type stays **uppercase** (the short arcade-style copy — SCORE, STAGE,
+GAME OVER — reads fine in caps at any edge treatment, and uppercase labels
+are common in friendly/illustrated mobile games too, not just retro ones),
+but letter-spacing relaxes from +1px to **+0.3px**: the old tight bitmap
+face needed wide tracking to stay legible at tiny sizes; a natively-
+rendered bold rounded face doesn't, and tighter tracking reads softer and
+friendlier. See §1.6 for the font stack and rendering technique.
+
+~~Original rule (superseded): bitmap glyph-height sizes, monospaced-cadence
+(fixed advance width per glyph), letter-spacing +1px.~~ *(kept for history)*
+
+### 1.6 In-game text rendering — REVISED M7.7 (2026-07-25, SCOPE-04)
+**RESOLVED: drop the hand-drawn 5×7 bitmap font (`index.html`'s current
+`FONT` table / `drawText()`, the old "approach 2" below) for a natively-
+rendered bold rounded system font with a soft stroked outline.** This is
+the single final approach — no longer "pick one of two."
+
+**Font stack (still zero external fonts/network calls — unchanged hard PRD
+constraint):**
+```css
+font: 800 var(--fs-title) ui-rounded, -apple-system, 'Segoe UI', Roboto,
+      'Helvetica Neue', Arial, sans-serif;
+```
+`ui-rounded` (Apple platforms' SF Rounded) is requested first for its soft,
+friendly terminals — matching the illustrated world's soft-edged shapes —
+and silently falls back to the platform's normal bold system sans
+everywhere else (Windows/Android/Linux/other browsers/engines without
+`ui-rounded` support), which still reads perfectly as "bold, chunky,
+legible," just without the rounded terminals. Every weight used is 700 or
+800 (bold/black) — never regular — so text keeps the same "instantly
+legible, can't mistake it for body copy" quality the old bitmap font had.
+
+**Rendering technique (replaces `index.html`'s `drawText()`/`FONT` bitmap
+table; keep the same call signature — `ctx, str, x, y, sizeToken, color,
+align` — so the ~30+ existing call sites across HUD/title/panels need zero
+changes beyond the function body):**
+1. Set `ctx.font` (from the §1.5 size/weight token), `ctx.textBaseline`,
+   `ctx.textAlign` per the existing `align` param.
+2. Draw the **outline first**: `ctx.lineJoin='round'; ctx.miterLimit=2;
+   ctx.lineWidth = fontSizePx * 0.22; ctx.strokeStyle = 'rgba(15,23,42,0.85)';
+   ctx.strokeText(str, x, y);` — a rounded-join stroke instead of the old
+   8-direction hard-pixel stamp, so the outline itself reads soft/organic,
+   not blocky.
+3. Then **fill**: `ctx.fillStyle = color; ctx.fillText(str, x, y);`
+
+- **Global legibility rule (requirement unchanged, technique updated):**
+  every piece of in-canvas text still gets a dark outline for contrast over
+  any of the 3 busy stage backgrounds — now a soft rounded stroke instead of
+  a hard 1-2px pixel-stamped shadow, but the underlying requirement (never
+  rely on color alone against a busy backdrop) is identical; see §8.
+- **Digit alignment:** most system sans stacks (SF/Segoe/Roboto included)
+  render digits 0-9 at a consistent tabular width by default, so the old
+  monospace-cadence trick isn't needed to stop score digits jittering —
+  spot-check in the browsers the PRD targets and only add manual per-digit
+  measurement if real jitter appears (unlikely, non-blocking).
+
+~~Original approaches (superseded): (1) offscreen low-res monospace text
+buffer upscaled with `imageSmoothingEnabled=false`; (2) hand-drawn 5×7
+`fillRect` bitmap glyph table — this is the one `index.html` actually
+shipped with through M7.5, now replaced per above.~~ *(kept for history)*
 
 ### 1.7 Motion tokens
 | Token | Value |
@@ -460,33 +587,60 @@ small scale and instantly readable as "moving hazard."
 
 ## 5. Particle / Juice Specs
 
-All particles are simple filled squares/small polys (no images), spawned
-from a shared lightweight particle-system class per PRD §5 (`Particle`).
+**REVISED M7.7 (2026-07-25, SCOPE-04) — decision: particles mostly stay as
+cheap, simple primitives** (no perf/complexity cost, and most fire at tiny
+sizes where edge treatment barely registers), **but the two effects that
+read as amorphous "blobs" (dust, splash droplets) round from squares to
+filled circles** to match the soft illustrated world, **while the two
+effects that are inherently spiky/angular by design (feather, corn
+sparkle/star) stay hard-edged on purpose** — their shape communicates their
+meaning (a feather blade, a star twinkle) per §8's "shape, not just color"
+rule, and rounding them would blur that read for no visual gain. This is
+the same sanctioned-exception logic §4.2 already used for the headlight
+glow, just running in the opposite direction (there, softness was the
+exception in a hard world; here, two deliberately-hard shapes are the
+exception in a soft world). The expanding ring (splash) was already a soft
+stroked circle and needs no change.
 
-### 5.1 Dust puff (hop)
-- 3–5 particles, 2×2–3×3px, neutral tan-grey (`#C9BFA6` on grass,
-  `#8A8A94` on road — tint by current lane type so it never clashes),
-  radiate outward from the hop origin/landing tile at low velocity with
-  slight upward drift, fading opacity 1→0 over **200–300ms**, no gravity.
+All particles are simple filled shapes (circles, rects, small polys — no
+images), spawned from a shared lightweight particle-system class per PRD §5
+(`Particle`).
 
-### 5.2 Feather burst (impact death)
+### 5.1 Dust puff (hop) — REVISED M7.7: filled circles, was squares
+- 3–5 particles, **filled circles**, 2–3px radius, neutral tan-grey
+  (`#C9BFA6` on grass, `#8A8A94` on road — tint by current lane type so it
+  never clashes), radiate outward from the hop origin/landing tile at low
+  velocity with slight upward drift, fading opacity 1→0 over **200–300ms**,
+  no gravity. (In `index.html`, this is the default `Particle` `type:'rect'`
+  square draw switched to a `type:'circle'` `ctx.arc` draw, for the `dust()`
+  emitter only.)
+
+### 5.2 Feather burst (impact death) — UNCHANGED at M7.7 (see §5 note)
 - 6–10 small elongated feather-shaped particles (2–3px wide "leaf" quads,
   approximable as thin rects), colors drawn from the chicken palette
   (`B`, `S`, `W`), fly outward radially from impact point at moderate
   velocity, **gravity-affected** (arc downward), 1px/frame rotation
   wobble, fade out over **500–700ms** (roughly matches the death beat).
+  Kept hard-edged on purpose — a feather is already a thin angular blade
+  shape, not a blob, so it doesn't suffer the "leftover pixel-art square"
+  problem dust/splash had.
 
-### 5.3 Water splash
-- 8–12 small circular/square droplet particles in `--*-river-foam` +
-  `--*-river` tones, burst upward-and-outward then fall with gravity,
-  **plus** one expanding ring: a stroked circle scaling 1×→3× radius while
-  fading opacity 0.6→0 over **400–600ms**, centered on the splash tile.
+### 5.3 Water splash — REVISED M7.7: droplets are circles-only, was circular/square
+- 8–12 small **circular** droplet particles (the square variant is
+  dropped) in `--*-river-foam` + `--*-river` tones, burst upward-and-
+  outward then fall with gravity, **plus** one expanding ring: a stroked
+  circle scaling 1×→3× radius while fading opacity 0.6→0 over
+  **400–600ms**, centered on the splash tile (ring is unchanged — already
+  the soft/round treatment).
 
-### 5.4 Corn sparkle
+### 5.4 Corn sparkle — UNCHANGED at M7.7 (see §5 note)
 - 4–6 small plus/star-shaped particles in `--chrome-gold` + white,
   burst outward from the corn tile at short range, fade over **250–
   350ms**; paired with a **HUD corn-counter pulse**: counter scales to
-  115% with a gold flash-outline for 150ms.
+  115% with a gold flash-outline for 150ms. Kept hard-edged on purpose — a
+  star/sparkle silhouette is inherently spiky; rounding it would make it
+  read as a blob and lose the "sparkle" shape-cue §8 requires (shape, not
+  just color, carries the "special pickup" meaning).
 
 ### 5.5 Screen shake (on any death by impact/train)
 - Camera/render-offset jitter: amplitude **6–10px**, decaying
@@ -559,8 +713,9 @@ sell depth without any 3D:
   - **Left:** `SCORE` label (`--fs-label`, `--chrome-fg-muted`) stacked
     above the score value (`--fs-value`, `--chrome-fg`, tabular/fixed-
     width digits so it never jitters as digits change).
-  - **Center:** `STAGE {n}/3` badge, small pixel-notch chip,
-    `--chrome-secondary` background.
+  - **Center:** `STAGE {n}/3` badge, small **rounded** chip
+    (`--radius-control` corners + `--shadow-control`, per the M7.7 §1.3/§1.4
+    revision), `--chrome-secondary` background.
   - **Right:** corn icon + count (`--chrome-gold` value), and a **44×44px
     mute toggle button** (speaker icon default state / speaker-with-slash
     when muted) as the rightmost element — this is the one persistent
@@ -568,8 +723,12 @@ sell depth without any 3D:
     44px touch-target minimum.
 - **States:** score/corn counters pulse (§5.4) on increment; stage badge
   flashes `--chrome-accent` briefly on stage transition; mute button has
-  default / muted / pressed (scale 0.9, shadow collapse) / focus-visible
-  (2px `--chrome-secondary` outline ring, keyboard-reachable) states.
+  default / muted / pressed (scale 0.96, shadow shrinks — the M7.7 §1.4
+  soft-press treatment, replacing the old hard scale-0.9/shadow-collapse) /
+  focus-visible (2px `--chrome-secondary` outline ring, keyboard-reachable)
+  states. Mute button now also carries the universal `--radius-control:
+  12px` rounded corners (§1.3) — the same token as the stage/corn chips, so
+  it's a deliberate, on-token choice rather than a one-off.
 - **Edge cases:** 4+ digit scores must not overflow — score value is
   right-aligned in a flexible-width zone, label truncation never needed
   since values are numeric-only.
@@ -577,7 +736,8 @@ sell depth without any 3D:
 ### 7.3 Stage-Clear Screen
 - **Trigger:** row 30 of the active stage (PRD §7.5).
 - **Layout:** current stage scene freezes behind a 60%-black scrim; a
-  centered pixel-notch panel (`--chrome-panel`, hard shadow) shows:
+  centered **rounded** panel (`--chrome-panel`, `--radius-panel`,
+  `--shadow-panel` — per the M7.7 §1.3/§1.4 revision) shows:
   `STAGE {n} CLEAR!` title (`--fs-title`, `--chrome-accent`), then two
   stat rows — `SCORE {n}` and `CORN {n}` (`--fs-body`) — then a thin
   progress bar that fills over **1.5–2s** before auto-advancing to the
@@ -663,7 +823,7 @@ sell depth without any 3D:
 
 | Component | Default | Hover (desktop) | Pressed | Disabled | Loading | Error/Empty |
 |---|---|---|---|---|---|---|
-| Mute button | speaker icon | scale 1.05 + border brighten | scale 0.9, shadow collapses | n/a (always available) | n/a | n/a |
+| Mute button | speaker icon, `--radius-control` rounded corners (M7.7) | scale 1.05 + border brighten | scale 0.96, shadow shrinks (M7.7 soft-press, was scale 0.9/shadow-collapse) | n/a (always available) | n/a | n/a |
 | Start/Restart prompt | blinking text, 500ms cadence | n/a (full-screen tap target, no discrete hover) | brief scale-down flash on activation | n/a | n/a | n/a |
 | Score/Corn counter | static digits | n/a | n/a | n/a | n/a | shows `0`, never blank |
 | Stage badge | `STAGE n/3` | n/a | n/a | n/a | transition flash (`--chrome-accent`, 200ms) | n/a |
@@ -819,7 +979,10 @@ rather than replacing it, per this task's instruction to preserve history:
    (heightened tiling-risk flag added, check itself unchanged) are all
    re-baselined to Option B in this same task. §0 above records the
    resulting two-track (illustrated world / still-hard-edge chrome)
-   identity and its explicit M7.7 follow-up.
+   identity and its explicit M7.7 follow-up. **(M7.7 update, 2026-07-25: the
+   "still-hard-edge chrome" half of that two-track identity is now
+   resolved/superseded — see §0's M7.7 status update and §1.3-§1.6/§5/§7.2
+   above. This historical entry is left as-written for the record.)**
 
 **`chick-idle` adopt-vs-regenerate verdict (this task, against the
 finalized manifest):** `assets/gen/m7.1b-styleB/final/chick-idle-styleB.png`
@@ -1163,12 +1326,18 @@ remain in the registry (no longer excluded).
    16 row-strings using the legend in §4.1) — treat
    `design/style-guide.html`'s `PIXEL_MAPS` object as the exact reference
    to port, not just inspiration.
-3. Text rendering: pick ONE of the two §1.6 approaches before writing HUD
-   code — do not fall back to plain unstyled `ctx.fillText` with a raw
-   system font at full size, it will look off-brand.
-4. Headlights/streetlights are the *only* place gradients/soft edges are
-   allowed — keep that exception narrow so the pixel-art identity stays
-   consistent.
+3. **Text rendering (M7.7, revised):** implement the §1.6 native bold
+   rounded-font + stroke-outline technique — no longer "pick one of two";
+   the old hand-drawn bitmap font (`FONT`/`drawText()`) is retired. Do not
+   fall back to plain unstyled `ctx.fillText` with a raw system font and no
+   outline — it will fail the §8 legibility-over-busy-backgrounds rule.
+4. Headlights/streetlights were historically the *only* sanctioned soft/
+   gradient exception in the old hard-edge chrome track; as of M7.7 the
+   chrome itself is soft (rounded corners, blurred shadows, native
+   anti-aliased text), so this is no longer a narrow exception to protect —
+   it's just consistent with everything else now. The particle system
+   keeps its OWN narrow exception in the other direction (§5): dust/splash
+   round to circles, but feather/sparkle stay deliberately hard-edged.
 5. All 6 stat/prompt screens (title, HUD, stage-clear ×1 pattern reused
    per stage, game-over, victory) share one panel component — build it
    once, themed via the chrome tokens, not 4 bespoke layouts.
@@ -1179,7 +1348,10 @@ remain in the registry (no longer excluded).
 7. **M7.2 asset registry (§10.6.11, FINAL SYNC 2026-07-24):** wire the 30
    ACCEPT/ACCEPT-WITH-NOTE generated images per the JSON registry — `id →
    data:` URI (base64-inline the listed `final/*.png` files),
-   `imageSmoothingEnabled = false` unless/until M7.7 says otherwise,
+   `imageSmoothingEnabled = true` scoped tightly around each of these
+   `drawImage` calls only, reset to `false` immediately after (M7.7/ISS-06
+   RESOLVED, §1.1 — this is what frontend's M7.4 implementation already
+   does; this note now matches reality instead of deferring the question),
    draw-call fallback-first (registry present → draw image; absent → keep
    the existing programmatic call, no deletion). Do NOT wire the 3 fallback
    tiles (`tile-s2-road`, `tile-s3-road`, `tile-s3-rail`) or the 1
@@ -1189,4 +1361,39 @@ remain in the registry (no longer excluded).
    ACCEPT — the shadow-blob defect is fixed) — wire it along with the
    other 29 (which includes `eagle-grabbed`/`bg-s2-skyline` added in the
    prior pass).
-</content>
+8. **M7.7 chrome restyle (2026-07-25, SCOPE-04 RESOLVED) — summary for a
+   fast re-read, full detail in §1.3-§1.6/§5/§7.2/§9 above:**
+   - **Panels/badges/mute button:** rounded corners (`--radius-panel: 20px`
+     modals, `--radius-control: 12px` chips/buttons/mute), soft blurred
+     shadows (`--shadow-panel`, `--shadow-control`), pressed state = scale
+     0.96 + shadow shrink. Replaces pixel-notch corners + hard-offset
+     shadows everywhere they appeared (§1.3, §1.4, §7.2, §7.3, §9).
+   - **In-game text:** native bold rounded system font (`ui-rounded`
+     first, falls back to normal bold system sans) + rounded-join stroke
+     outline, drawn directly with `ctx.strokeText`/`fillText`. Replaces the
+     `FONT`/`drawText()` 5×7 bitmap glyph table entirely — delete it, keep
+     the `drawText(ctx,str,x,y,sizeToken,color,align)` call signature so
+     existing call sites don't need to change (§1.5, §1.6).
+   - **Particles:** `dust()` and `splash()`'s droplet particles switch from
+     `type:'rect'` (square) to a new `type:'circle'` (`ctx.arc`) draw.
+     `feathers()` and `sparkle()`(`type:'spark'`) are UNCHANGED — keep them
+     hard-edged on purpose (§5). The expanding splash ring is unchanged.
+   - **Mute button specifically:** give it the same `--radius-control:
+     12px` as every other chip/button (the current `_drawMute()` code is
+     sharp-cornered `fillRect`/`strokeRect` — the "already rounded" look
+     tester saw was very likely a scaling/screenshot artifact, not real
+     code; implement the radius for real, on-token, matching everywhere
+     else, rather than treating it as already-done).
+   - **`imageSmoothingEnabled` (ISS-06):** no runtime change — frontend's
+     existing M7.4 scoping (`true` locally around world-art `drawImage`
+     calls, `false` as the canvas-wide default otherwise) is confirmed
+     correct and final; §1.1 above is now the authoritative doc statement.
+   - **No new raster assets required.** This is a canvas-drawing/font/
+     shadow/corner-radius restyle only — `docs/ASSET_MANIFEST.md` and the
+     accepted image registry (§10.6.11) are untouched by M7.7.
+9. **Estimated frontend footprint:** `_panel()`/`_notchPath()` (rounded-rect
+   path + shadow), `drawText()`/`FONT` (replace with native font+stroke),
+   `_drawMute()` (add radius), `Particle.render()`'s default/`'rect'`
+   branch (add a `'circle'` branch, switch `dust()`/`splash()` to use it) —
+   all in `index.html`, no HTML/CSS changes, no new assets, no manifest
+   changes.
