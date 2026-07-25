@@ -377,6 +377,13 @@ class Particle {
       ctx.fillStyle = this.color;
       ctx.fillRect(this.x-this.size, this.y, this.size*2, 1);
       ctx.fillRect(this.x, this.y-this.size, 1, this.size*2);
+    } else if(this.type==='circle'){
+      // DESIGN §5 (M7.7/SCOPE-04): dust()/splash() amorphous-blob particles
+      // round from squares to filled circles to match the soft illustrated
+      // world. feather()/sparkle() stay on the 'feather'/'spark' branches
+      // above, deliberately unchanged (their angular shape carries meaning).
+      ctx.fillStyle = this.color;
+      ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI*2); ctx.fill();
     } else {
       ctx.fillStyle = this.color;
       ctx.fillRect(this.x|0, this.y|0, this.size, this.size);
@@ -396,12 +403,13 @@ class ParticleSystem {
   render(ctx){ for(const p of this.list) p.render(ctx); }
 
   dust(x,y,tint){
+    // DESIGN §5.1 (M7.7): filled circles, was filled squares.
     const col = tint || '#C9BFA6';
     const n = 3 + (Math.random()*3|0);
     for(let i=0;i<n;i++){
       const a = (i/n)*Math.PI*2 + Math.random();
       this.add({x,y, vx:Math.cos(a)*30, vy:Math.sin(a)*18 - 24,
-        g:20, size:2+(Math.random()*2|0), color:col, life:0.25+Math.random()*0.08});
+        g:20, size:2+(Math.random()*2|0), color:col, life:0.25+Math.random()*0.08, type:'circle'});
     }
   }
   feathers(x,y){
@@ -414,11 +422,13 @@ class ParticleSystem {
     }
   }
   splash(x,y,foam,water){
+    // DESIGN §5.3 (M7.7): droplets are circles-only (the square variant is
+    // dropped); the expanding ring stays unchanged (already soft/round).
     for(let i=0;i<11;i++){
       const a = (i/11)*Math.PI*2;
       const sp = 50+Math.random()*70;
       this.add({x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - 60,
-        g:260, size:2, color:(i%2?foam:water), life:0.4+Math.random()*0.2});
+        g:260, size:2, color:(i%2?foam:water), life:0.4+Math.random()*0.2, type:'circle'});
     }
     this.add({x,y, size:6, color:foam, life:0.5, type:'ring'});
   }
