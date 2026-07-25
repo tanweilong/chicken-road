@@ -1934,6 +1934,16 @@ window.addEventListener('load', ()=>{
     for(let i=0;i<hops;i++){ if(game.player) { game.player.row++; game.player.x = colCenterX(3); } }
     if(game.player){
       game.furthest = game.player.row; game.camera.y = game.player.row - LEAD; game.camera.minY = game.camera.y;
+      // TC-AC2-04 fix (ISS-07 test-harness artifact, M7.7 cleanup): this
+      // ?hops=N QA debug hook teleports the player's row/furthest directly,
+      // bypassing onPlayerLanded() — the only other place game.score is ever
+      // set. Left unsynced, game.score stays stale (0 at boot) until the
+      // next REAL hop recomputes it via the normal formula, which then
+      // "jumps" score by `furthest` in one frame — a test-harness artifact,
+      // not a live-play bug (organic play always goes through
+      // onPlayerLanded() and was never affected). Mirror the exact same
+      // formula onPlayerLanded() uses so the hook never leaves score stale.
+      game.score = game.stageBase + game.furthest + game.corn*3;
       game._ensureSafeLanding(); // BUG-5 fix: neutralize whatever hazard occupies the landing tile
     }
     const scr = q.get('screen');
